@@ -40,13 +40,13 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             Logger?.Log($"Starting OData export.");
             foreach (var mapping in job.Mappings)
             {
-                if (mapping.DestinationTable == null && mapping.SourceTable == null)
+                if (mapping.SourceTable == null)
                 {
-                    Logger?.Log($"Sourcetable is null.");
+                    Logger?.Log($"Source table is null.");
                     continue;
                 }
 
-                if (mapping.DestinationTable == null && mapping.SourceTable == null)
+                if (mapping.DestinationTable == null)
                 {
                     Logger?.Log($"Destination table is null.");
                     continue;

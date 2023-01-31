@@ -35,19 +35,19 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         public override bool RunJob(Job job)
         {
             ReplaceMappingConditionalsWithValuesFromRequest(job);
-            
+
             _endpointService.GetEndpoints(); //needed for reset cached Endpoints as the used one is getting updated values, so it will accumulate it's parameters on each run.
             _endpoint = _endpointService.GetEndpointById(Convert.ToInt32(EndpointId));
             Logger?.Log($"Starting OData export.");
             foreach (var mapping in job.Mappings)
             {
-                if (mapping.DestinationTable == null && mapping.SourceTable == null)
+                if (mapping.SourceTable == null)
                 {
-                    Logger?.Log($"Sourcetable is null.");
+                    Logger?.Log($"Source table is null.");
                     continue;
                 }
 
-                if (mapping.DestinationTable == null && mapping.SourceTable == null)
+                if (mapping.DestinationTable == null)
                 {
                     Logger?.Log($"Destination table is null.");
                     continue;

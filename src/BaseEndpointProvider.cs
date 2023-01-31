@@ -4,7 +4,6 @@ using Dynamicweb.DataIntegration.Integration;
 using Dynamicweb.DataIntegration.Integration.Interfaces;
 using Dynamicweb.DataIntegration.Providers.ODataProvider.Interfaces;
 using Dynamicweb.DataIntegration.Providers.ODataProvider.Model;
-using Dynamicweb.Ecommerce.Shops;
 using Dynamicweb.Extensibility.AddIns;
 using Dynamicweb.Extensibility.Editors;
 using System;
@@ -23,25 +22,17 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
     public class BaseEndpointProvider : BaseProvider, ISource, IDestination, IDropDownOptionActions
     {
         internal string _workingDirectory;
-        internal IHttpRestClient _client;
         internal readonly EndpointService _endpointService = new EndpointService();
         internal readonly EndpointAuthenticationService _endpointAuthenticationService = new EndpointAuthenticationService();
-        internal readonly ShopService _shopService = Ecommerce.Services.Shops;
         internal EndpointAuthentication _endpointAuthentication;
         internal Schema _schema;
-        internal Schema _originalSchema;
         internal Endpoint _endpoint;
         internal ICredentials _credentials;
         internal string _autodetectedMetadataURL;
-        internal string _autodetectedEntityName;
-        internal string _autodetectedEndpointFilter;
-        internal string _autodetectedEndpointSelect;
         internal string _metadataUrl;
-        internal string _autodetectedDestinationAPIURL;
         internal bool _loadAPIFunction = false;
         internal EndpointSourceReader _endpointSourceReader;
-        private AuthenticationHelper AuthenticationHelper = new AuthenticationHelper();
-        internal IHttpRestClient Client => _client ?? new HttpRestClient(_credentials, 20); // Unfortunately we need to provide for encapsulated instantiation of the HttpClient due to how ConfigurableAddIns work :(
+        internal IHttpRestClient Client => new HttpRestClient(_credentials, 20); // Unfortunately we need to provide for encapsulated instantiation of the HttpClient due to how ConfigurableAddIns work :(
 
 
         #region AddInManager/ConfigurableAddIn Source
@@ -67,24 +58,6 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         [AddInParameterGroup("Source")]
         [AddInParameterSection("Metadata")]
         public string AutodetectedMetadataURL { get => _autodetectedMetadataURL; set { SetCredentials(); } }
-
-        [AddInParameter("Entity name")]
-        [AddInParameterEditor(typeof(TextParameterEditor), "infoText=Manually override autodetected entity name;inputClass=NewUIinput;")]
-        [AddInParameterGroup("Source")]
-        [AddInParameterSection("Entity")]
-        public string EntityName { get; set; }
-
-        [AddInParameter("Entity set name")]
-        [AddInParameterEditor(typeof(TextParameterEditor), "infoText=Manually override autodetected entity set name;inputClass=NewUIinput;")]
-        [AddInParameterGroup("Source")]
-        [AddInParameterSection("Entity")]
-        public string EntitySetName { get; set; }
-
-        [AddInParameter("Autodetected entity name")]
-        [AddInParameterEditor(typeof(LabelParameterEditor), "")]
-        [AddInParameterGroup("Source")]
-        [AddInParameterSection("Entity")]
-        public string AutodetectedEntityName { get => _autodetectedEntityName; set { GetEntityName(); } }
 
         [AddInParameter("Mode")]
         [AddInParameterEditor(typeof(DropDownParameterEditor), "Info=Required;NewGUI=true;none=true;nonetext=Please select a Mode;columns=Mode|Comment;SortBy=Key;")]
@@ -173,24 +146,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 
         private string GetEntityName()
         {
-            string result;
-            try
-            {
-                _autodetectedEntityName = new Uri(_endpoint.Url).Segments.LastOrDefault() ?? _endpoint.Name;
-            }
-            catch
-            {
-                _autodetectedEntityName = "Not able to detect!";
-            }
-            if (string.IsNullOrEmpty(EntityName))
-            {
-                result = _autodetectedEntityName;
-            }
-            else
-            {
-                result = EntityName;
-            }
-            return result;
+            return new Uri(_endpoint.Url).Segments.LastOrDefault() ?? _endpoint.Name;
         }
 
         internal void SetCredentials()
@@ -299,9 +255,9 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 }
                 Task metadataResponse;
                 EndpointAuthentication endpointAuthentication = _endpointAuthenticationService.GetEndpointAuthenticationById(_endpoint.AuthenticationId);
-                if (AuthenticationHelper.IsTokenBased(endpointAuthentication))
+                if (endpointAuthentication.IsTokenBased())
                 {
-                    string token = AuthenticationHelper.GetToken(_endpoint, endpointAuthentication);
+                    string token = OAuthHelper.GetToken(_endpoint, endpointAuthentication);
                     metadataResponse = Client.GetAsync(GetMetadataURL(), HandleStream, token);
                 }
                 else
@@ -310,7 +266,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 }
                 metadataResponse.Wait();
             }
-            return  entitySetsTables;
+            return entitySetsTables;
 
             void HandleStream(Stream responseStream, HttpStatusCode responseStatusCode, Dictionary<string, string> responseHeaders)
             {
@@ -528,10 +484,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             DoNotStoreLastResponseInLogFile = newProvider.DoNotStoreLastResponseInLogFile;
             EndpointId = newProvider.EndpointId;
             MetadataUrl = newProvider.MetadataUrl;
-            EntityName = newProvider.EntityName;
-            EntitySetName = newProvider.EntitySetName;
             AutodetectedMetadataURL = newProvider.AutodetectedMetadataURL;
-            AutodetectedEntityName = newProvider.AutodetectedEntityName;
             SetCredentials();
             GetEntityName();
         }
@@ -604,18 +557,6 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                             MetadataUrl = node.FirstChild.Value;
                         }
                         break;
-                    case "Entityname":
-                        if (node.HasChildNodes)
-                        {
-                            EntityName = node.FirstChild.Value;
-                        }
-                        break;
-                    case "Entitysetname":
-                        if (node.HasChildNodes)
-                        {
-                            EntitySetName = node.FirstChild.Value;
-                        }
-                        break;
                     case "Destinationmetadataurl":
                         if (node.HasChildNodes)
                         {
@@ -626,12 +567,6 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                         if (node.HasChildNodes)
                         {
                             AutodetectedMetadataURL = node.FirstChild.Value;
-                        }
-                        break;
-                    case "Autodetectedentityname":
-                        if (node.HasChildNodes)
-                        {
-                            AutodetectedEntityName = node.FirstChild.Value;
                         }
                         break;
                     case "Autodetecteddestinationmetadataurl":
@@ -658,11 +593,8 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             root.Add(CreateParameterNode(GetType(), "Predefined endpoint", EndpointId));
             root.Add(CreateParameterNode(GetType(), "Destination endpoint", DestinationEndpointId));
             root.Add(CreateParameterNode(GetType(), "Metadata url", MetadataUrl));
-            root.Add(CreateParameterNode(GetType(), "Entity name", EntityName));
-            root.Add(CreateParameterNode(GetType(), "Entity set name", EntitySetName));
             root.Add(CreateParameterNode(GetType(), "Destination metadata url", DestinationMetadataURL));
             root.Add(CreateParameterNode(GetType(), "Autodetected metadata url", AutodetectedMetadataURL));
-            root.Add(CreateParameterNode(GetType(), "Autodetected entity name", AutodetectedEntityName));
             root.Add(CreateParameterNode(GetType(), "Autodetected destination metadata url", AutodetectedDestinationMetadataURL));
             return document.ToString();
         }
@@ -679,11 +611,8 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             textWriter.WriteElementString("Predefinedendpoint", EndpointId);
             textWriter.WriteElementString("Destinationendpoint", DestinationEndpointId);
             textWriter.WriteElementString("Metadataurl", MetadataUrl);
-            textWriter.WriteElementString("Entityname", EntityName);
-            textWriter.WriteElementString("Entitysetname", EntitySetName);
             textWriter.WriteElementString("Destinationmetadataurl", DestinationMetadataURL);
             textWriter.WriteElementString("Autodetectedmetadataurl", AutodetectedMetadataURL);
-            textWriter.WriteElementString("Autodetectedentityname", AutodetectedEntityName);
             textWriter.WriteElementString("Autodetecteddestinationmetadataurl", AutodetectedDestinationMetadataURL);
             GetSchema().SaveAsXml(textWriter);
         }

@@ -40,7 +40,6 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         private int _requestCounter = 1;
         private readonly bool _doNotStoreLastResponseInLogFile;
         private bool _requestTimedOutFromGlobalSettings;
-        private AuthenticationHelper AuthenticationHelper = new AuthenticationHelper();
 
         internal void SaveRequestResponseFile()
         {
@@ -216,7 +215,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             IDictionary<string, string> result = parameters;
             if (result.ContainsKey(parameterName))
             {
-                if(result[parameterName] == parameterValue)
+                if (result[parameterName] == parameterValue)
                 {
                     result.Remove(parameterName);
                 }
@@ -395,9 +394,9 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                         _requestTimedOutFromGlobalSettings = true;
                     }
                 }
-                if (AuthenticationHelper.IsTokenBased(_endpointAuthentication))
+                if (_endpointAuthentication.IsTokenBased())
                 {
-                    string token = AuthenticationHelper.GetToken(_endpoint, _endpointAuthentication);
+                    string token = OAuthHelper.GetToken(_endpoint, _endpointAuthentication);
                     task = RetryHelper.RetryOnExceptionAsync<Exception>(10, async () => { _httpRestClient.GetAsync(url, HandleStream, token, (Dictionary<string, string>)_endpoint.Headers).Wait(new CancellationTokenSource(timeoutInMilliseconds).Token); }, _logger);
                 }
                 else
@@ -489,9 +488,9 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             checkUrl += "?$top=1";
             bool result = false;
             Task task;
-            if (AuthenticationHelper.IsTokenBased(_endpointAuthentication))
+            if (_endpointAuthentication.IsTokenBased())
             {
-                string token = AuthenticationHelper.GetToken(_endpoint, _endpointAuthentication);
+                string token = OAuthHelper.GetToken(_endpoint, _endpointAuthentication);
                 task = _httpRestClient.GetAsync(checkUrl, HandleResponse, token);
             }
             else

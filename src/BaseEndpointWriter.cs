@@ -20,7 +20,6 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         public readonly Endpoint Endpoint;
         public readonly ICredentials Credentials;
         public readonly EndpointAuthenticationService EndpointAuthenticationService;
-        private AuthenticationHelper AuthenticationHelper = new AuthenticationHelper();
         private Dictionary<string, Type> _destinationPrimaryKeyColumns;
         public Mapping Mapping { get; }
 
@@ -62,7 +61,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             Task<RestResponse<string>> awaitResponseFromERP;
             if (response != null && response.Count > 0)
             {
-                if(response.Count > 1)
+                if (response.Count > 1)
                 {
                     Logger?.Error($"The filter returned too many records, please update or change filter.");
                     return;
@@ -130,9 +129,9 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             var _client = new HttpRestClient(Credentials, RequestTimeout, Logger);
             EndpointAuthentication endpointAuthentication = GetEndpointAuthentication();
             Task<RestResponse<T>> awaitResponseFromBC;
-            if (AuthenticationHelper.IsTokenBased(endpointAuthentication))
+            if (endpointAuthentication.IsTokenBased())
             {
-                string token = AuthenticationHelper.GetToken(Endpoint, endpointAuthentication);
+                string token = OAuthHelper.GetToken(Endpoint, endpointAuthentication);
                 if (!patch)
                 {
                     awaitResponseFromBC = _client.PostAsync<string, T>(URL, jsonObject, token, header);
@@ -161,9 +160,9 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             var _client = new HttpRestClient(Credentials, RequestTimeout, Logger);
             EndpointAuthentication endpointAuthentication = GetEndpointAuthentication();
             Task<RestResponse<ResponseFromERP<T>>> awaitResponseFromBC;
-            if (AuthenticationHelper.IsTokenBased(endpointAuthentication))
+            if (endpointAuthentication.IsTokenBased())
             {
-                string token = AuthenticationHelper.GetToken(Endpoint, endpointAuthentication);
+                string token = OAuthHelper.GetToken(Endpoint, endpointAuthentication);
                 awaitResponseFromBC = _client.GetAsync<ResponseFromERP<T>>(URL, token, header);
             }
             else
@@ -193,11 +192,9 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 case ScriptType.Constant:
                     result = columnMapping.ScriptValue;
                     break;
-            }
-
-            if (columnMapping.HasNewGuidScript())
-            {
-                result = columnMapping.GetScriptValue();
+                case ScriptType.NewGuid:
+                    result = columnMapping.GetScriptValue();
+                    break;
             }
             return result;
         }
@@ -270,7 +267,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             catch (Exception e)
             {
                 Logger?.Log(e.ToString());
-                throw e;
+                throw;
             }
             Logger?.Log($"End synchronizing '{Mapping.SourceTable.Name}' to '{Mapping.DestinationTable.Name}'.");
         }
