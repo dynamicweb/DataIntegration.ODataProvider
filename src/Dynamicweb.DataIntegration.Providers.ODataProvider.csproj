@@ -3,8 +3,8 @@
 		<VersionPrefix>10.0.0</VersionPrefix>
 		<VersionSuffix>Alpha0001</VersionSuffix>
 		<AssemblyVersion>1.0.0.0</AssemblyVersion>
-		<Title>OData Provider</Title>
-		<Description>OData Provider</Description>
+		<Title>OData Providers</Title>
+		<Description>Odata Providers: Package contains BC (Microsoft Dynamics 365 Business Central) provider, FO (Microsoft Dynamics 365 Finance and Operations) provider and CRM (Microsoft Dynamics 365 Sales) provider.</Description>
 	</PropertyGroup>
 	<PropertyGroup>
 		<PackageProjectUrl>https://doc.dynamicweb.com/</PackageProjectUrl>
@@ -28,4 +28,7 @@
 		<PackageReference Include="Dynamicweb.DataIntegration" Version="10.0.0-*" />
 		<PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.1.1" PrivateAssets="All" />
 	</ItemGroup>
+  <ItemGroup>
+    <None Include="odata-logo.png" Pack="true" Visible="false" PackagePath="\" />
+  </ItemGroup>
 </Project>
