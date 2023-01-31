@@ -9,6 +9,7 @@
 	<PropertyGroup>
 		<PackageProjectUrl>https://doc.dynamicweb.com/</PackageProjectUrl>
     <PackageTags>Dynamicweb dw10 addin dataintegration providers</PackageTags>
+    <PackageIcon>quickpay-logo.png</PackageIcon>
 		<Product>Dynamicweb CMS</Product>
 		<Company>Dynamicweb Software A/S</Company>
 		<Authors>Dynamicweb Software A/S</Authors>
