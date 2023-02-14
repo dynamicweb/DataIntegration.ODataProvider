@@ -38,7 +38,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         #region AddInManager/ConfigurableAddIn Source
 
         [AddInParameter("Predefined endpoint")]
-        [AddInParameterEditor(typeof(DropDownParameterEditor), "NewGUI=true;refreshParameters=true;")]
+        [AddInParameterEditor(typeof(DropDownParameterEditor), "none=true;refreshParameters=true;required=true")]
         [AddInParameterGroup("Source")]
         [AddInParameterSection("Source")]
         public string EndpointId
@@ -48,7 +48,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         }
 
         [AddInParameter("Metadata url")]
-        [AddInParameterEditor(typeof(TextParameterEditor), "infoText=Manually override autodetected metadata URL;inputClass=NewUIinput;")]
+        [AddInParameterEditor(typeof(TextParameterEditor), "infoText=Manually override autodetected metadata URL")]
         [AddInParameterGroup("Source")]
         [AddInParameterSection("Metadata")]
         public string MetadataUrl { get => _metadataUrl; set => _metadataUrl = value; }
@@ -60,7 +60,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         public string AutodetectedMetadataURL { get => _autodetectedMetadataURL; set { SetCredentials(); } }
 
         [AddInParameter("Mode")]
-        [AddInParameterEditor(typeof(DropDownParameterEditor), "Info=Required;NewGUI=true;none=true;nonetext=Please select a Mode;columns=Mode|Comment;SortBy=Key;")]
+        [AddInParameterEditor(typeof(DropDownParameterEditor), "Info=Required;none=true;nonetext=Please select a Mode;columns=Mode|Comment;SortBy=Key")]
         [AddInParameterGroup("Source")]
         [AddInParameterSection("Advanced activity settings")]
         public string Mode { get; set; }
@@ -72,7 +72,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         public int MaximumPageSize { get; set; }
 
         [AddInParameter("Request timeout (minutes)")]
-        [AddInParameterEditor(typeof(IntegerNumberParameterEditor), "allowNegativeValues=false;DefaultValue=20")]
+        [AddInParameterEditor(typeof(IntegerNumberParameterEditor), "allowNegativeValues=false")]
         [AddInParameterGroup("Source")]
         [AddInParameterSection("Advanced activity settings")]
         public int RequestTimeout { get; set; } = 20;
@@ -84,7 +84,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         public bool RunLastRequest { get; set; }
 
         [AddInParameter("Run request in intervals (pages)")]
-        [AddInParameterEditor(typeof(IntegerNumberParameterEditor), "allowNegativeValues=false;DefaultValue=0")]
+        [AddInParameterEditor(typeof(IntegerNumberParameterEditor), "allowNegativeValues=false")]
         [AddInParameterGroup("Source")]
         [AddInParameterSection("Advanced activity settings")]
         public int RequestIntervals { get; set; } = 0;
@@ -100,7 +100,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         #region AddInManager/ConfigurableAddIn Destination
 
         [AddInParameter("Destination endpoint")]
-        [AddInParameterEditor(typeof(DropDownParameterEditor), "NewGUI=true;refreshParameters=true;")]
+        [AddInParameterEditor(typeof(DropDownParameterEditor), "none=true;refreshParameters=true;required=true")]
         [AddInParameterGroup("Destination")]
         public string DestinationEndpointId
         {
@@ -109,7 +109,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         }
 
         [AddInParameter("Destination metadata url")]
-        [AddInParameterEditor(typeof(TextParameterEditor), "infoText=Manually override autodetected metadata URL;inputClass=NewUIinput;")]
+        [AddInParameterEditor(typeof(TextParameterEditor), "infoText=Manually override autodetected metadata URL")]
         [AddInParameterGroup("Destination")]
         public string DestinationMetadataURL { get => _metadataUrl; set => _metadataUrl = value; }
 
@@ -439,11 +439,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 
         public override string ValidateSourceSettings()
         {
-            if (string.IsNullOrEmpty(EndpointId))
-            {
-                return "Predefined endpoint can not be empty. Please select any predefined endpoint.";
-            }
-            else if (_endpointAuthentication == null)
+            if (_endpointAuthentication == null)
             {
                 return "Credentials not set for endpoint, please add credentials before continue.";
             }
@@ -452,11 +448,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 
         public override string ValidateDestinationSettings()
         {
-            if (string.IsNullOrEmpty(DestinationEndpointId))
-            {
-                return "Destination endpoint can not be empty. Please select any destination endpoint";
-            }
-            else if (_endpointAuthentication == null)
+            if (_endpointAuthentication == null)
             {
                 return "Credentials not set for endpoint, please add credentials before continue.";
             }
