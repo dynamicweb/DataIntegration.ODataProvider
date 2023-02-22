@@ -17,10 +17,9 @@ using System.Threading.Tasks;
 
 namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 {
-    internal class EndpointSourceReader : ISourceReader
+    internal class ODataSourceReader : ISourceReader
     {
         private readonly IHttpRestClient _httpRestClient;
-        private readonly EndpointAuthentication _endpointAuthentication;
         private readonly ILogger _logger;
         private readonly Mapping _mapping;
         private readonly Endpoint _endpoint;
@@ -85,14 +84,14 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         }
 
         /// <summary>
-        /// Initializes a new instance of the <see cref="EndpointSourceReader"/> class.
+        /// Initializes a new instance of the <see cref="ODataSourceReader"/> class.
         /// </summary>
         /// <param name="httpRestClient">The HTTP rest client.</param>
         /// <param name="logger">The logger.</param>
         /// <param name="mapping">The mapping.</param>
         /// <param name="endpoint">The endpoint.</param>
         /// <param name="nextPaginationUrlName">Name of the next pagination URL. "odata.nextLink" (case insensitive) is supposed to be a standard.</param>
-        internal EndpointSourceReader(IHttpRestClient httpRestClient, ILogger logger, Mapping mapping, Endpoint endpoint, string mode, int maximumPageSize, EndpointAuthenticationService endpointAuthenticationService, bool readFromLastRequestResponse, int requestIntervals, bool doNotStoreLastResponseInLogFile, string nextPaginationUrlName = "odata.nextLink")
+        internal ODataSourceReader(IHttpRestClient httpRestClient, ILogger logger, Mapping mapping, Endpoint endpoint, string mode, int maximumPageSize, bool readFromLastRequestResponse, int requestIntervals, bool doNotStoreLastResponseInLogFile, string nextPaginationUrlName = "odata.nextLink")
         {
             _totalResponseResult = new List<Dictionary<string, object>>();
             _httpRestClient = httpRestClient;
@@ -105,7 +104,6 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             _requestIntervals = requestIntervals;
             _doNotStoreLastResponseInLogFile = doNotStoreLastResponseInLogFile;
             string logFileName = Scheduling.Task.MakeSafeFileName(mapping.Job.Name) + $"_{_mapping.SourceTable.Name}.log";
-            _endpointAuthentication = endpointAuthenticationService.GetEndpointAuthenticationById(_endpoint.AuthenticationId);
             if (File.Exists(_highWaterMarkMapPath.CombinePaths(logFileName)))
             {
                 _responseResult = JsonConvert.DeserializeObject<IEnumerable<Dictionary<string, object>>>(File.ReadAllText(_highWaterMarkMapPath.CombinePaths(logFileName)));
@@ -129,7 +127,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 
                 _endpoint.Parameters = AddFilterAndSelectValuesToEndpointParameters(_endpoint.Parameters);
                 AddConfigurableAddInsSelectionsToEndpoint();
-                if (BaseEndpointProvider.EndpointIsLoadAllEntities(_endpoint.Url))
+                if (ODataProvider.EndpointIsLoadAllEntities(_endpoint.Url))
                 {
                     _endpoint.Url = new Uri(new Uri(_endpoint.Url), mapping.SourceTable.Name).AbsoluteUri;
                 }
@@ -234,13 +232,20 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             if (activeColumnMappings.Any())
             {
                 var selectColumnNames = activeColumnMappings.Where(obj => obj.SourceColumn != null)?.Select(obj => obj.SourceColumn.Name).ToList();
-                if (!parameters.TryGetValue("$select", out _))
+
+                //max limit for url-length is roughly 2048 characters, so we skip adding if there is more than 1250 in the parameters.
+                var selectColumnNamesJoined = string.Join(",", selectColumnNames);
+                int length = selectColumnNamesJoined.Length;
+                if (length <= 1250)
                 {
-                    result.Add("$select", string.Join(",", selectColumnNames));
-                }
-                else
-                {
-                    result["$select"] += "," + string.Join(",", selectColumnNames);
+                    if (!parameters.TryGetValue("$select", out _))
+                    {
+                        result.Add("$select", selectColumnNamesJoined);
+                    }
+                    else
+                    {
+                        result["$select"] += "," + selectColumnNamesJoined;
+                    }
                 }
             }
 
@@ -394,14 +399,15 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                         _requestTimedOutFromGlobalSettings = true;
                     }
                 }
-                if (_endpointAuthentication.IsTokenBased())
+                var endpointAuthentication = _endpoint.Authentication;
+                if (endpointAuthentication.IsTokenBased())
                 {
-                    string token = OAuthHelper.GetToken(_endpoint, _endpointAuthentication);
+                    string token = OAuthHelper.GetToken(_endpoint, endpointAuthentication);
                     task = RetryHelper.RetryOnExceptionAsync<Exception>(10, async () => { _httpRestClient.GetAsync(url, HandleStream, token, (Dictionary<string, string>)_endpoint.Headers).Wait(new CancellationTokenSource(timeoutInMilliseconds).Token); }, _logger);
                 }
                 else
                 {
-                    task = RetryHelper.RetryOnExceptionAsync<Exception>(10, async () => { _httpRestClient.GetAsync(url, HandleStream, _endpointAuthentication, (Dictionary<string, string>)_endpoint.Headers).Wait(new CancellationTokenSource(timeoutInMilliseconds).Token); }, _logger);
+                    task = RetryHelper.RetryOnExceptionAsync<Exception>(10, async () => { _httpRestClient.GetAsync(url, HandleStream, endpointAuthentication, (Dictionary<string, string>)_endpoint.Headers).Wait(new CancellationTokenSource(timeoutInMilliseconds).Token); }, _logger);
                 }
                 if (task.IsCanceled)
                 {
@@ -488,14 +494,15 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             checkUrl += "?$top=1";
             bool result = false;
             Task task;
-            if (_endpointAuthentication.IsTokenBased())
+            var endpointAuthentication = _endpoint.Authentication;
+            if (endpointAuthentication.IsTokenBased())
             {
-                string token = OAuthHelper.GetToken(_endpoint, _endpointAuthentication);
+                string token = OAuthHelper.GetToken(_endpoint, endpointAuthentication);
                 task = _httpRestClient.GetAsync(checkUrl, HandleResponse, token);
             }
             else
             {
-                task = _httpRestClient.GetAsync(checkUrl, HandleResponse, _endpointAuthentication);
+                task = _httpRestClient.GetAsync(checkUrl, HandleResponse, endpointAuthentication);
             }
             task.Wait();
             void HandleResponse(Stream responseStream, HttpStatusCode responseStatusCode, Dictionary<string, string> responseHeaders)

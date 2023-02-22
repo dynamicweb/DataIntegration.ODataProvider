@@ -18,20 +18,22 @@ using System.Xml.Linq;
 
 namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 {
+    [AddInName("Dynamicweb.DataIntegration.Providers.Provider")]
+    [AddInLabel("OData Provider")]
+    [AddInDescription("OData provider")]
+    [AddInIgnore(false)]
     [AddInUseParameterSectioning(true)]
-    public class BaseEndpointProvider : BaseProvider, ISource, IDestination, IDropDownOptionActions
+    public class ODataProvider : BaseProvider, ISource, IDestination, IDropDownOptionActions
     {
         internal string _workingDirectory;
         internal readonly EndpointService _endpointService = new EndpointService();
-        internal readonly EndpointAuthenticationService _endpointAuthenticationService = new EndpointAuthenticationService();
-        internal EndpointAuthentication _endpointAuthentication;
         internal Schema _schema;
         internal Endpoint _endpoint;
         internal ICredentials _credentials;
         internal string _autodetectedMetadataURL;
         internal string _metadataUrl;
         internal bool _loadAPIFunction = false;
-        internal EndpointSourceReader _endpointSourceReader;
+        internal ODataSourceReader _endpointSourceReader;
         internal IHttpRestClient Client => new HttpRestClient(_credentials, 20); // Unfortunately we need to provide for encapsulated instantiation of the HttpClient due to how ConfigurableAddIns work :(
 
 
@@ -153,16 +155,13 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         {
             if (_endpoint != null)
             {
-                if (_endpointAuthentication == null)
-                {
-                    _endpointAuthentication = _endpointAuthenticationService.GetEndpointAuthenticationById(_endpoint.AuthenticationId);
-                }
-                if (_endpointAuthentication != null)
+                var endpointAuthentication = _endpoint.Authentication;
+                if (endpointAuthentication != null)
                 {
                     var metadataUri = new Uri(GetMetadataURL());
                     var credentialCache = new CredentialCache
                     {
-                        { new Uri(metadataUri.GetLeftPart(UriPartial.Authority)), _endpointAuthentication.Type.ToString(), _endpointAuthentication.GetNetworkCredential() }
+                        { new Uri(metadataUri.GetLeftPart(UriPartial.Authority)), endpointAuthentication.Type.ToString(), endpointAuthentication.GetNetworkCredential() }
                     };
                     _credentials = credentialCache;
                 }
@@ -179,27 +178,14 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 options.Add("Full Replication", "Full replication|This mode gets all records and deletes nothing. This option should only run once.");
                 options.Add("First page", "First page|If maximum page size is 100 then this setting only handles the 100 records of the first page.");
             }
+            if (name == "Predefined endpoint" || name == "Destination endpoint")
+            {
+                foreach (var endpoint in _endpointService.GetEndpoints())
+                {
+                    options.Add(endpoint.Id, endpoint.Name);
+                }
+            }
             return options;
-        }
-
-        internal List<Endpoint> GetEndpoints(Type providerType)
-        {
-            string endpointPattern = string.Empty;
-            if (providerType == typeof(BCProvider))
-            {
-                endpointPattern = "api.businesscentral.dynamics.com";
-            }
-            else if (providerType == typeof(FOProvider))
-            {
-                endpointPattern = ".cloudax.dynamics.com/data/";
-            }
-            else if (providerType == typeof(CRMProvider))
-            {
-                endpointPattern = ".dynamics.com/api/data/v";
-            }
-            var result = _endpointService.GetEndpoints().ToList();
-            var filteredEndpoints = result.Where(obj => obj.Url.Contains(endpointPattern, StringComparison.OrdinalIgnoreCase))?.ToList() ?? new List<Endpoint>();
-            return filteredEndpoints.Any() ? filteredEndpoints : result;
         }
 
         /// <inheritdoc />
@@ -246,15 +232,10 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 { "accept", "text/html,application/xhtml+xml,application/xml" },
                 { "Content-Type", "text/html" }
             };
-            if (_endpointAuthenticationService != null && _endpoint != null)
+            if (_endpoint != null)
             {
-                _endpointAuthentication = _endpointAuthenticationService.GetEndpointAuthenticationById(_endpoint.AuthenticationId);
-                if (_endpointAuthentication != null)
-                {
-                    SetCredentials();
-                }
+                var endpointAuthentication = _endpoint.Authentication;
                 Task metadataResponse;
-                EndpointAuthentication endpointAuthentication = _endpointAuthenticationService.GetEndpointAuthenticationById(_endpoint.AuthenticationId);
                 if (endpointAuthentication.IsTokenBased())
                 {
                     string token = OAuthHelper.GetToken(_endpoint, endpointAuthentication);
@@ -427,7 +408,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             }
             _endpointService.GetEndpoints(); //needed for reset cached Endpoints as the used one is getting updated values, so it will accumulate it's parameters on each run.
             _endpoint = _endpointService.GetEndpointById(Convert.ToInt32(EndpointId));
-            _endpointSourceReader = new EndpointSourceReader(new HttpRestClient(_credentials, RequestTimeout), Logger, mapping, _endpoint, Mode, MaximumPageSize, _endpointAuthenticationService, RunLastRequest, RequestIntervals, DoNotStoreLastResponseInLogFile);
+            _endpointSourceReader = new ODataSourceReader(new HttpRestClient(_credentials, RequestTimeout), Logger, mapping, _endpoint, Mode, MaximumPageSize, RunLastRequest, RequestIntervals, DoNotStoreLastResponseInLogFile);
             return _endpointSourceReader;
         }
 
@@ -439,25 +420,17 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 
         public override string ValidateSourceSettings()
         {
-            if (_endpointAuthentication == null)
-            {
-                return "Credentials not set for endpoint, please add credentials before continue.";
-            }
             return null;
         }
 
         public override string ValidateDestinationSettings()
         {
-            if (_endpointAuthentication == null)
-            {
-                return "Credentials not set for endpoint, please add credentials before continue.";
-            }
             return null;
         }
 
         public override void UpdateDestinationSettings(IDestination destination)
         {
-            BaseEndpointProvider newProvider = (BaseEndpointProvider)destination;
+            ODataProvider newProvider = (ODataProvider)destination;
             DestinationEndpointId = newProvider.DestinationEndpointId;
             DestinationMetadataURL = newProvider.DestinationMetadataURL;
             AutodetectedDestinationMetadataURL = newProvider.AutodetectedDestinationMetadataURL;
@@ -467,7 +440,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         /// <inheritdoc />
         public override void UpdateSourceSettings(ISource source)
         {
-            BaseEndpointProvider newProvider = (BaseEndpointProvider)source;
+            ODataProvider newProvider = (ODataProvider)source;
             Mode = newProvider.Mode;
             MaximumPageSize = newProvider.MaximumPageSize;
             RequestTimeout = newProvider.RequestTimeout;
@@ -481,12 +454,12 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             GetEntityName();
         }
 
-        public BaseEndpointProvider()
+        public ODataProvider()
         {
             _workingDirectory = SystemInformation.MapPath("/Files/");
         }
 
-        public BaseEndpointProvider(XmlNode xmlNode) : this()
+        public ODataProvider(XmlNode xmlNode) : this()
         {
             foreach (XmlNode node in xmlNode.ChildNodes)
             {
@@ -623,6 +596,55 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 
         public override bool RunJob(Job job)
         {
+            ReplaceMappingConditionalsWithValuesFromRequest(job);
+
+            _endpointService.GetEndpoints(); //needed for reset cached Endpoints as the used one is getting updated values, so it will accumulate it's parameters on each run.
+            _endpoint = _endpointService.GetEndpointById(Convert.ToInt32(EndpointId));
+            Logger?.Log($"Starting OData export.");
+            foreach (var mapping in job.Mappings)
+            {
+                if (mapping.SourceTable == null)
+                {
+                    Logger?.Log($"Source table is null.");
+                    continue;
+                }
+
+                if (mapping.DestinationTable == null)
+                {
+                    Logger?.Log($"Destination table is null.");
+                    continue;
+                }
+                if (!mapping.Active && mapping.GetColumnMappings().Count == 0)
+                {
+                    Logger?.Log($"There are no active mappings between '{mapping.SourceTable.Name}' and '{mapping.DestinationTable.Name}'.");
+                    continue;
+                }
+
+                Logger?.Log($"Begin synchronizing '{mapping.SourceTable.Name}' to '{mapping.DestinationTable.Name}'.");
+                using (var writer = new ODataWriter(Logger, mapping, _endpoint, _credentials))
+                {
+                    using (ISourceReader sourceReader = mapping.Source.GetReader(mapping))
+                    {
+                        try
+                        {
+                            while (!sourceReader.IsDone())
+                            {
+                                var sourceRow = sourceReader.GetNext();
+                                ProcessInputRow(mapping, sourceRow);
+                                writer.Write(sourceRow);
+                            }
+                        }
+                        catch (Exception e)
+                        {
+                            Logger?.Log(e.ToString());
+                            throw;
+                        }
+                    }
+                }
+                Logger?.Log($"End synchronizing '{mapping.SourceTable.Name}' to '{mapping.DestinationTable.Name}'.");
+            }
+            Logger?.Log($"Finished OData export.");
+
             return true;
         }
 

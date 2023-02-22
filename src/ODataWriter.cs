@@ -14,28 +14,27 @@ using System.Threading.Tasks;
 
 namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 {
-    internal class BaseEndpointWriter : BaseProvider
+    internal class ODataWriter : IDisposable, IDestinationWriter
     {
         public readonly int RequestTimeout = 20;
         public readonly Endpoint Endpoint;
+        private readonly ILogger Logger;
         public readonly ICredentials Credentials;
-        public readonly EndpointAuthenticationService EndpointAuthenticationService;
         private Dictionary<string, Type> _destinationPrimaryKeyColumns;
         public Mapping Mapping { get; }
 
-        internal BaseEndpointWriter(ILogger logger, Mapping mapping, Endpoint endpoint, ICredentials credentials, EndpointAuthenticationService endpointAuthenticationService)
+        internal ODataWriter(ILogger logger, Mapping mapping, Endpoint endpoint, ICredentials credentials)
         {
             Logger = logger;
             Endpoint = endpoint;
             Credentials = credentials;
             Mapping = mapping;
-            EndpointAuthenticationService = endpointAuthenticationService;
             var originalDestinationTables = Mapping.Destination.GetOriginalDestinationSchema().GetTables();
             var originalDestinationMappingTable = originalDestinationTables.FirstOrDefault(obj => obj.Name == Mapping.DestinationTable.Name);
             _destinationPrimaryKeyColumns = originalDestinationMappingTable?.Columns.Where(obj => obj.IsPrimaryKey)?.ToDictionary(obj => obj.Name, obj => obj.Type) ?? new Dictionary<string, Type>();
         }
 
-        public void WriteToERP(Dictionary<string, object> Row, string writerName)
+        public void Write(Dictionary<string, object> Row)
         {
             string url = GetEndpointURL(Endpoint, "");
 
@@ -51,9 +50,9 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             if (keyColumnValuesForFilter.Any())
             {
                 string filter = string.Join(" and ", keyColumnValuesForFilter);
-                Endpoint.Parameters = EndpointSourceReader.AddOrUpdateParameter(Endpoint.Parameters, "$filter", filter);
+                Endpoint.Parameters = ODataSourceReader.AddOrUpdateParameter(Endpoint.Parameters, "$filter", filter);
                 url = GetEndpointURL(Endpoint, "");
-                Endpoint.Parameters = EndpointSourceReader.RemoveParameter(Endpoint.Parameters, "$filter", filter);
+                Endpoint.Parameters = ODataSourceReader.RemoveParameter(Endpoint.Parameters, "$filter", filter);
             }
 
             var response = GetFromEndpoint<JObject>(url, null);
@@ -103,7 +102,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             awaitResponseFromERP.Wait();
             if (!string.IsNullOrEmpty(awaitResponseFromERP.Result.Error))
             {
-                Logger.Warn($"Error {writerName} Url: {url}. Response Error: {awaitResponseFromERP.Result.Error}");
+                Logger.Warn($"Error Url: {url}. Response Error: {awaitResponseFromERP.Result.Error}");
             }
         }
 
@@ -111,7 +110,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         {
             var oldEndpointUrl = endpoint.Url;
             string result = "";
-            if (BaseEndpointProvider.EndpointIsLoadAllEntities(Endpoint.Url))
+            if (ODataProvider.EndpointIsLoadAllEntities(Endpoint.Url))
             {
                 endpoint.Url = new Uri(new Uri(Endpoint.Url), Mapping.DestinationTable.Name).AbsoluteUri;
             }
@@ -127,7 +126,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         internal Task<RestResponse<T>> PostToEndpoint<T>(string URL, string jsonObject, Dictionary<string, string> header, bool patch)
         {
             var _client = new HttpRestClient(Credentials, RequestTimeout, Logger);
-            EndpointAuthentication endpointAuthentication = GetEndpointAuthentication();
+            var endpointAuthentication = Endpoint.Authentication;
             Task<RestResponse<T>> awaitResponseFromBC;
             if (endpointAuthentication.IsTokenBased())
             {
@@ -158,7 +157,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         internal List<T> GetFromEndpoint<T>(string URL, Dictionary<string, string> header)
         {
             var _client = new HttpRestClient(Credentials, RequestTimeout, Logger);
-            EndpointAuthentication endpointAuthentication = GetEndpointAuthentication();
+            var endpointAuthentication = Endpoint.Authentication;
             Task<RestResponse<ResponseFromERP<T>>> awaitResponseFromBC;
             if (endpointAuthentication.IsTokenBased())
             {
@@ -171,11 +170,6 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             }
             awaitResponseFromBC.Wait();
             return awaitResponseFromBC.Result.Content.Value;
-        }
-
-        private EndpointAuthentication GetEndpointAuthentication()
-        {
-            return EndpointAuthenticationService.GetEndpointAuthenticationById(Endpoint.AuthenticationId);
         }
 
         public static string HandleScriptTypeForColumnMapping(ColumnMapping columnMapping, object columnValue)
@@ -252,24 +246,8 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             return jObject.ToString();
         }
 
-        internal void WriteData(ISourceReader sourceReader, IDestinationWriter writer)
-        {
-            Logger?.Log($"Begin synchronizing '{Mapping.SourceTable.Name}' to '{Mapping.DestinationTable.Name}'.");
-            try
-            {
-                while (!sourceReader.IsDone())
-                {
-                    var sourceRow = sourceReader.GetNext();
-                    ProcessInputRow(Mapping, sourceRow);
-                    writer.Write(sourceRow);
-                }
-            }
-            catch (Exception e)
-            {
-                Logger?.Log(e.ToString());
-                throw;
-            }
-            Logger?.Log($"End synchronizing '{Mapping.SourceTable.Name}' to '{Mapping.DestinationTable.Name}'.");
-        }
+        public void Dispose() { }
+
+        public void Close() { }
     }
 }
