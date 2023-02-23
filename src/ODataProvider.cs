@@ -23,7 +23,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
     [AddInDescription("OData provider")]
     [AddInIgnore(false)]
     [AddInUseParameterSectioning(true)]
-    public class ODataProvider : BaseProvider, ISource, IDestination, IDropDownOptionActions
+    public class ODataProvider : BaseProvider, ISource, IDestination, IDropDownOptions
     {
         internal string _workingDirectory;
         internal readonly EndpointService _endpointService = new EndpointService();
@@ -62,7 +62,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         public string AutodetectedMetadataURL { get => _autodetectedMetadataURL; set { SetCredentials(); } }
 
         [AddInParameter("Mode")]
-        [AddInParameterEditor(typeof(DropDownParameterEditor), "Info=Required;none=true;nonetext=Please select a Mode;columns=Mode|Comment;SortBy=Key")]
+        [AddInParameterEditor(typeof(DropDownParameterEditor), "Info=Required;none=true;nonetext=Full Replication;noneHint=This mode gets all records and deletes nothing. This option should only run once.;columns=Mode|Comment;SortBy=Key;HideParameters=Run request in intervals (pages),Do not store last response in log file")]
         [AddInParameterGroup("Source")]
         [AddInParameterSection("Advanced activity settings")]
         public string Mode { get; set; }
@@ -175,7 +175,6 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             if (name == "Mode")
             {
                 options.Add("Delta Replication", "Delta replication|This mode filters records on date and time, whenever possible, and it only acts on new or updated records. It never deletes.");
-                options.Add("Full Replication", "Full replication|This mode gets all records and deletes nothing. This option should only run once.");
                 options.Add("First page", "First page|If maximum page size is 100 then this setting only handles the 100 records of the first page.");
             }
             if (name == "Predefined endpoint" || name == "Destination endpoint")
@@ -401,7 +400,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         public override ISourceReader GetReader(Mapping mapping)
         {
             SetCredentials();
-            if (Mode != "Full Replication")
+            if (!string.IsNullOrEmpty(Mode))
             {
                 RequestIntervals = 0;
                 DoNotStoreLastResponseInLogFile = false;
@@ -646,25 +645,6 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             Logger?.Log($"Finished OData export.");
 
             return true;
-        }
-
-        public List<string> GetParametersToHide(string dropdownName, string optionKey)
-        {
-            List<string> result = new List<string>();
-            if (dropdownName == "Mode")
-            {
-                if (optionKey != "Full Replication")
-                {
-                    result.Add("Run request in intervals (pages)");
-                    result.Add("Do not store last response in log file");
-                }
-            }
-            return result;
-        }
-
-        public List<string> GetSectionsToHide(string dropdownName, string optionKey)
-        {
-            return new List<string>();
         }
 
         public static bool EndpointIsLoadAllEntities(string url)
