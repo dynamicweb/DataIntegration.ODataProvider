@@ -39,6 +39,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         private int _requestCounter = 1;
         private readonly bool _doNotStoreLastResponseInLogFile;
         private bool _requestTimedOutFromGlobalSettings;
+        private readonly int _maximumCharacterLengthOfAutoAddedSelectStatement = 1250;
 
         internal void SaveRequestResponseFile()
         {
@@ -125,27 +126,49 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                     _logger?.Info("Request file does not exists, now fetching from endpoint.");
                 }
 
-                _endpoint.Parameters = AddFilterAndSelectValuesToEndpointParameters(_endpoint.Parameters);
-                AddConfigurableAddInsSelectionsToEndpoint();
-                if (ODataProvider.EndpointIsLoadAllEntities(_endpoint.Url))
+                if (_maximumPageSize > 0)
                 {
-                    _endpoint.Url = new Uri(new Uri(_endpoint.Url), mapping.SourceTable.Name).AbsoluteUri;
+                    _endpoint.Headers = AddOrUpdateParameter(_endpoint.Headers, "prefer", "maxpagesize=" + _maximumPageSize);
                 }
-                string url = _endpoint.FullUrl;
+                if (_mode == "First page")
+                {
+                    _endpoint.Parameters = AddOrUpdateParameter(_endpoint.Parameters, "$top", _maximumPageSize.ToString());
+                }
+
+                var selectAsParameters = GetSelectAsParameters();
+                var modeAsParemters = GetModeAsParameters();
+                var filterAsParameters = GetFilterAsParameters();
+                if (!string.IsNullOrEmpty(modeAsParemters))
+                {
+                    filterAsParameters.Add(modeAsParemters);
+                }
+
+                string url = GetEndpointURL(_endpoint, string.Join(",", selectAsParameters), string.Join(" and ", filterAsParameters));
                 HandleRequest(url, $"Starting reading data from endpoint: '{_endpoint.Name}', using URL: '{url}'");
             }
         }
 
-        internal void AddConfigurableAddInsSelectionsToEndpoint()
+        internal string GetEndpointURL(Endpoint endpoint, string selectParameters, string filterParameters)
         {
-            if (_maximumPageSize > 0)
+            var oldEndpointUrl = endpoint.Url;
+            string result = "";
+            if (ODataProvider.EndpointIsLoadAllEntities(_endpoint.Url))
             {
-                _endpoint.Headers = AddOrUpdateParameter(_endpoint.Headers, "prefer", "maxpagesize=" + _maximumPageSize);
+                endpoint.Url = new Uri(new Uri(_endpoint.Url), _mapping.SourceTable.Name).AbsoluteUri;
             }
-            if (_mode == "First page")
-            {
-                _endpoint.Parameters = AddOrUpdateParameter(_endpoint.Parameters, "$top", _maximumPageSize.ToString());
-            }
+
+            _endpoint.Parameters = !string.IsNullOrEmpty(selectParameters) ? AddOrUpdateParameter(_endpoint.Parameters, "$select", selectParameters) : _endpoint.Parameters;
+            _endpoint.Parameters = !string.IsNullOrEmpty(filterParameters) ? AddOrUpdateParameter(_endpoint.Parameters, "$filter", filterParameters) : _endpoint.Parameters;
+            result = endpoint.FullUrl;
+            _endpoint.Parameters = !string.IsNullOrEmpty(selectParameters) ? RemoveParameter(_endpoint.Parameters, "$select", selectParameters) : _endpoint.Parameters;
+            _endpoint.Parameters = !string.IsNullOrEmpty(filterParameters) ? RemoveParameter(_endpoint.Parameters, "$filter", filterParameters) : _endpoint.Parameters;
+            _endpoint.Url = oldEndpointUrl;
+            return result;
+        }
+
+        private string GetModeAsParameters()
+        {
+            string result = "";
             if (_mode == "Delta Replication")
             {
                 DateTime? lastRunDateTime = _mapping.Job.LastSuccessfulRun;
@@ -188,10 +211,11 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                         {
                             dateTimeFilterName += " gt " + dateTimeInUtc.ToString("yyyy-MM-ddTHH:mm:ss.fff", CultureInfo.InvariantCulture) + "z";
                         }
-                        _endpoint.Parameters = AddOrUpdateParameter(_endpoint.Parameters, "$filter", dateTimeFilterName);
+                        result = dateTimeFilterName;
                     }
                 }
             }
+            return result;
         }
 
         public static IDictionary<string, string> AddOrUpdateParameter(IDictionary<string, string> parameters, string parameterName, string parameterValue)
@@ -225,9 +249,9 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             return result;
         }
 
-        private IDictionary<string, string> AddFilterAndSelectValuesToEndpointParameters(IDictionary<string, string> parameters)
+        private List<string> GetSelectAsParameters()
         {
-            IDictionary<string, string> result = parameters;
+            List<string> result = new();
             var activeColumnMappings = _mapping.GetColumnMappings().Where(obj => obj.Active).ToList();
             if (activeColumnMappings.Any())
             {
@@ -236,23 +260,24 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 //max limit for url-length is roughly 2048 characters, so we skip adding if there is more than 1250 in the parameters.
                 var selectColumnNamesJoined = string.Join(",", selectColumnNames);
                 int length = selectColumnNamesJoined.Length;
-                if (length <= 1250)
+                if (length <= _maximumCharacterLengthOfAutoAddedSelectStatement)
                 {
-                    if (!parameters.TryGetValue("$select", out _))
-                    {
-                        result.Add("$select", selectColumnNamesJoined);
-                    }
-                    else
-                    {
-                        result["$select"] += "," + selectColumnNamesJoined;
-                    }
+                    result = selectColumnNames;
+                }
+                else
+                {
+                    _logger?.Info("Detected many active column mappings, so will not auto add $select with all active column mappings and by that limit the data recieved from ERP.");
                 }
             }
+            return result;
+        }
 
+        private List<string> GetFilterAsParameters()
+        {
+            List<string> result = new();
             var mappingConditionals = _mapping.Conditionals.ToList();
             if (mappingConditionals.Any())
             {
-                List<string> filterValues = new List<string>();
                 foreach (var item in mappingConditionals)
                 {
                     string condition = item.Condition;
@@ -272,7 +297,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                             operatorInOData = "ne";
                             break;
                         case ConditionalOperator.Contains:
-                            filterValues.Add($"contains({item.SourceColumn.Name},'{item.Condition}')");
+                            result.Add($"contains({item.SourceColumn.Name},'{item.Condition}')");
                             continue;
                         case ConditionalOperator.In:
                             operatorInOData = "eq";
@@ -290,22 +315,11 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                     }
                     if (item.SourceColumn.Type == typeof(string))
                     {
-                        filterValues.Add($"({item.SourceColumn.Name} {operatorInOData} '{condition}')");
+                        result.Add($"({item.SourceColumn.Name} {operatorInOData} '{condition}')");
                     }
                     else
                     {
-                        filterValues.Add($"({item.SourceColumn.Name} {operatorInOData} {condition})");
-                    }
-                }
-                if (filterValues.Any())
-                {
-                    if (!parameters.TryGetValue("$filter", out _))
-                    {
-                        result.Add("$filter", string.Join(" and ", filterValues));
-                    }
-                    else
-                    {
-                        result["$filter"] += " and " + string.Join(" and ", filterValues);
+                        result.Add($"({item.SourceColumn.Name} {operatorInOData} {condition})");
                     }
                 }
             }
