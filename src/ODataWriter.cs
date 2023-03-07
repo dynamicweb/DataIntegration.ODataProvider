@@ -36,12 +36,13 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 
         public void Write(Dictionary<string, object> Row)
         {
-            string url = GetEndpointURL(Endpoint, "");
-
             if (!Mapping.Conditionals.CheckConditionals(Row))
             {
                 return;
             }
+
+            string endpointURL = Endpoint.Url;
+            string url = ODataSourceReader.GetEndpointURL(endpointURL, Mapping.DestinationTable.Name, "");
 
             var columnMappings = Mapping.GetColumnMappings();
             var keyColumnValuesForFilter = GetKeyColumnValuesForFilter(Row, columnMappings);
@@ -50,13 +51,22 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             if (keyColumnValuesForFilter.Any())
             {
                 string filter = string.Join(" and ", keyColumnValuesForFilter);
-                Endpoint.Parameters = ODataSourceReader.AddOrUpdateParameter(Endpoint.Parameters, "$filter", filter);
-                url = GetEndpointURL(Endpoint, "");
-                Endpoint.Parameters = ODataSourceReader.RemoveParameter(Endpoint.Parameters, "$filter", filter);
+                IDictionary<string, string> parameters = new Dictionary<string, string>() { { "$filter", filter } };
+                if (Endpoint.Parameters != null)
+                {
+                    foreach (var item in Endpoint.Parameters)
+                    {
+                        if (!parameters.ContainsKey(item.Key))
+                        {
+                            parameters.Add(item.Key, item.Value);
+                        }
+                    }
+                }
+                url = ODataSourceReader.GetEndpointURL(endpointURL, Mapping.DestinationTable.Name, "", parameters);
             }
 
             var response = GetFromEndpoint<JObject>(url, null);
-            url = GetEndpointURL(Endpoint, "");
+            url = ODataSourceReader.GetEndpointURL(endpointURL, Mapping.DestinationTable.Name, "");
             Task<RestResponse<string>> awaitResponseFromERP;
             if (response != null && response.Count > 0)
             {
@@ -91,7 +101,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 if (primaryKeyColumnValuesForPatch.Any())
                 {
                     string patchURL = "(" + string.Join(",", primaryKeyColumnValuesForPatch) + ")";
-                    url = GetEndpointURL(Endpoint, patchURL);
+                    url = ODataSourceReader.GetEndpointURL(endpointURL, Mapping.DestinationTable.Name, patchURL);
                 }
                 awaitResponseFromERP = PostToEndpoint<string>(url, request, headers, true);
             }
@@ -104,23 +114,6 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             {
                 Logger.Warn($"Error Url: {url}. Response Error: {awaitResponseFromERP.Result.Error}");
             }
-        }
-
-        internal string GetEndpointURL(Endpoint endpoint, string patchValue)
-        {
-            var oldEndpointUrl = endpoint.Url;
-            string result = "";
-            if (ODataProvider.EndpointIsLoadAllEntities(Endpoint.Url))
-            {
-                endpoint.Url = new Uri(new Uri(Endpoint.Url), Mapping.DestinationTable.Name).AbsoluteUri;
-            }
-            if (!string.IsNullOrEmpty(patchValue))
-            {
-                endpoint.Url += patchValue;
-            }
-            result = endpoint.FullUrl;
-            Endpoint.Url = oldEndpointUrl;
-            return result;
         }
 
         internal Task<RestResponse<T>> PostToEndpoint<T>(string URL, string jsonObject, Dictionary<string, string> header, bool patch)

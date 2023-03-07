@@ -12,6 +12,7 @@ using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -105,12 +106,15 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             _requestIntervals = requestIntervals;
             _doNotStoreLastResponseInLogFile = doNotStoreLastResponseInLogFile;
             string logFileName = Scheduling.Task.MakeSafeFileName(mapping.Job.Name) + $"_{_mapping.SourceTable.Name}.log";
+
+            IDictionary<string, string> headers = GetAllHeaders();
+
             if (File.Exists(_highWaterMarkMapPath.CombinePaths(logFileName)))
             {
                 _responseResult = JsonConvert.DeserializeObject<IEnumerable<Dictionary<string, object>>>(File.ReadAllText(_highWaterMarkMapPath.CombinePaths(logFileName)));
                 if (_responseResult.First().TryGetValue("@odata.nextLink", out var paginationUrl))
                 {
-                    HandleRequest(paginationUrl.ToString(), $"Starting reading data from endpoint: '{_endpoint.Name}', using URL: '{paginationUrl}'");
+                    HandleRequest(paginationUrl.ToString(), $"Starting reading data from endpoint: '{_endpoint.Name}', using URL: '{paginationUrl}'", headers);
                 }
                 _responseEnumerator = _responseResult.GetEnumerator();
             }
@@ -126,13 +130,11 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                     _logger?.Info("Request file does not exists, now fetching from endpoint.");
                 }
 
-                if (_maximumPageSize > 0)
-                {
-                    _endpoint.Headers = AddOrUpdateParameter(_endpoint.Headers, "prefer", "maxpagesize=" + _maximumPageSize);
-                }
+                IDictionary<string, string> parameters = new Dictionary<string, string>();
+
                 if (_mode == "First page")
                 {
-                    _endpoint.Parameters = AddOrUpdateParameter(_endpoint.Parameters, "$top", _maximumPageSize.ToString());
+                    parameters.Add("$top", _maximumPageSize.ToString());
                 }
 
                 var selectAsParameters = GetSelectAsParameters();
@@ -143,26 +145,88 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                     filterAsParameters.Add(modeAsParemters);
                 }
 
-                string url = GetEndpointURL(_endpoint, string.Join(",", selectAsParameters), string.Join(" and ", filterAsParameters));
-                HandleRequest(url, $"Starting reading data from endpoint: '{_endpoint.Name}', using URL: '{url}'");
+                if (selectAsParameters.Any())
+                {
+                    parameters.Add("$select", string.Join(",", selectAsParameters));
+                }
+
+                if (filterAsParameters.Any())
+                {
+                    parameters.Add("$filter", string.Join(" and ", filterAsParameters));
+                }
+
+                if (_endpoint.Parameters != null)
+                {
+                    foreach (var parameter in _endpoint.Parameters)
+                    {
+                        if (!parameters.ContainsKey(parameter.Key))
+                        {
+                            parameters.Add(parameter.Key, parameter.Value);
+                        }
+                    }
+                }
+
+                string url = GetEndpointURL(_endpoint.Url, _mapping.SourceTable.Name, "", parameters);
+                HandleRequest(url, $"Starting reading data from endpoint: '{_endpoint.Name}', using URL: '{url}'", headers);
             }
         }
 
-        internal string GetEndpointURL(Endpoint endpoint, string selectParameters, string filterParameters)
+        internal IDictionary<string, string> GetAllHeaders()
         {
-            var oldEndpointUrl = endpoint.Url;
-            string result = "";
-            if (ODataProvider.EndpointIsLoadAllEntities(_endpoint.Url))
+            IDictionary<string, string> result = new Dictionary<string, string>();
+            if (_maximumPageSize > 0)
             {
-                endpoint.Url = new Uri(new Uri(_endpoint.Url), _mapping.SourceTable.Name).AbsoluteUri;
+                result.Add("prefer", "maxpagesize=" + _maximumPageSize);
+            }
+            if (_endpoint.Headers != null)
+            {
+                foreach (var header in _endpoint.Headers)
+                {
+                    if (!result.ContainsKey(header.Key))
+                    {
+                        result.Add(header.Key, header.Value);
+                    }
+                }
+            }
+            return result;
+        }
+
+        public static string GetEndpointURL(string baseURL, string tableName, string patchURL, IDictionary<string, string> parameters = null)
+        {
+            string result = baseURL;
+            if (ODataProvider.EndpointIsLoadAllEntities(baseURL))
+            {
+                result = new Uri(new Uri(baseURL), tableName).AbsoluteUri;
+            }
+            if (!string.IsNullOrEmpty(patchURL))
+            {
+                result += patchURL;
             }
 
-            _endpoint.Parameters = !string.IsNullOrEmpty(selectParameters) ? AddOrUpdateParameter(_endpoint.Parameters, "$select", selectParameters) : _endpoint.Parameters;
-            _endpoint.Parameters = !string.IsNullOrEmpty(filterParameters) ? AddOrUpdateParameter(_endpoint.Parameters, "$filter", filterParameters) : _endpoint.Parameters;
-            result = endpoint.FullUrl;
-            _endpoint.Parameters = !string.IsNullOrEmpty(selectParameters) ? RemoveParameter(_endpoint.Parameters, "$select", selectParameters) : _endpoint.Parameters;
-            _endpoint.Parameters = !string.IsNullOrEmpty(filterParameters) ? RemoveParameter(_endpoint.Parameters, "$filter", filterParameters) : _endpoint.Parameters;
-            _endpoint.Url = oldEndpointUrl;
+            if (parameters != null && parameters.Count > 0)
+            {
+                StringBuilder stringBuilder = new StringBuilder(string.Empty);
+                foreach (KeyValuePair<string, string> parameter in parameters)
+                {
+                    stringBuilder.Append("&" + parameter.Key + "=" + WebUtility.UrlEncode(parameter.Value));
+                }
+
+                if (stringBuilder.Length > 0)
+                {
+                    if (!result.Contains("?"))
+                    {
+                        return $"{result}?{stringBuilder.Remove(0, 1)}";
+                    }
+
+                    if (!result.EndsWith("?"))
+                    {
+                        return $"{result}{stringBuilder}";
+                    }
+
+                    return $"{result}{stringBuilder.Remove(0, 1)}";
+                }
+            }
+
             return result;
         }
 
@@ -213,37 +277,6 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                         }
                         result = dateTimeFilterName;
                     }
-                }
-            }
-            return result;
-        }
-
-        public static IDictionary<string, string> AddOrUpdateParameter(IDictionary<string, string> parameters, string parameterName, string parameterValue)
-        {
-            IDictionary<string, string> result = parameters;
-            if (result.ContainsKey(parameterName))
-            {
-                result[parameterName] = parameterValue;
-            }
-            else
-            {
-                result.Add(parameterName, parameterValue);
-            }
-            return result;
-        }
-
-        public static IDictionary<string, string> RemoveParameter(IDictionary<string, string> parameters, string parameterName, string parameterValue)
-        {
-            IDictionary<string, string> result = parameters;
-            if (result.ContainsKey(parameterName))
-            {
-                if (result[parameterName] == parameterValue)
-                {
-                    result.Remove(parameterName);
-                }
-                else
-                {
-                    result[parameterName] = result[parameterName].Replace(parameterValue, "");
                 }
             }
             return result;
@@ -396,7 +429,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             }
         }
 
-        private bool HandleRequest(string url, string loggerInfo)
+        private bool HandleRequest(string url, string loggerInfo, IDictionary<string, string> headers)
         {
             if (CheckIfEndpointIsReadyForUse(url))
             {
@@ -417,11 +450,11 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 if (endpointAuthentication.IsTokenBased())
                 {
                     string token = OAuthHelper.GetToken(_endpoint, endpointAuthentication);
-                    task = RetryHelper.RetryOnExceptionAsync<Exception>(10, async () => { _httpRestClient.GetAsync(url, HandleStream, token, (Dictionary<string, string>)_endpoint.Headers).Wait(new CancellationTokenSource(timeoutInMilliseconds).Token); }, _logger);
+                    task = RetryHelper.RetryOnExceptionAsync<Exception>(10, async () => { _httpRestClient.GetAsync(url, HandleStream, token, (Dictionary<string, string>)headers).Wait(new CancellationTokenSource(timeoutInMilliseconds).Token); }, _logger);
                 }
                 else
                 {
-                    task = RetryHelper.RetryOnExceptionAsync<Exception>(10, async () => { _httpRestClient.GetAsync(url, HandleStream, endpointAuthentication, (Dictionary<string, string>)_endpoint.Headers).Wait(new CancellationTokenSource(timeoutInMilliseconds).Token); }, _logger);
+                    task = RetryHelper.RetryOnExceptionAsync<Exception>(10, async () => { _httpRestClient.GetAsync(url, HandleStream, endpointAuthentication, (Dictionary<string, string>)headers).Wait(new CancellationTokenSource(timeoutInMilliseconds).Token); }, _logger);
                 }
                 if (task.IsCanceled)
                 {
@@ -460,7 +493,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                     FinishJob();
                     return true;
                 }
-                if (HandleRequest(_paginationUrl, $"Paginating request to endpoint: '{_endpoint.Name}', using URL: '{_paginationUrl}'"))
+                if (HandleRequest(_paginationUrl, $"Paginating request to endpoint: '{_endpoint.Name}', using URL: '{_paginationUrl}'", GetAllHeaders()))
                 {
                     _requestCounter++;
                 }
