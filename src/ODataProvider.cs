@@ -6,6 +6,7 @@ using Dynamicweb.DataIntegration.Providers.ODataProvider.Interfaces;
 using Dynamicweb.DataIntegration.Providers.ODataProvider.Model;
 using Dynamicweb.Extensibility.AddIns;
 using Dynamicweb.Extensibility.Editors;
+using Dynamicweb.Security.Licensing;
 using System;
 using System.Collections;
 using System.Collections.Generic;
@@ -650,6 +651,95 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         public static bool EndpointIsLoadAllEntities(string url)
         {
             return url.EndsWith("/") || url.EndsWith("$metadata", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private bool CheckLicense()
+        {
+            bool hasAccess = false;
+            string url = _endpoint.Url;
+            if (IsFOEnpoint(url))
+            {
+                hasAccess = LicenseManager.LicenseHasFeature("eCom_DataIntegrationERPBatch_FO") || LicenseManager.LicenseHasFeature("eCom_DataIntegrationERPLiveIntegration_FO");
+            }
+            else if (ISCRMEndpoint(url))
+            {
+                hasAccess = LicenseManager.LicenseHasFeature("eCom_DataIntegrationERPBatch_CRM") || LicenseManager.LicenseHasFeature("eCom_DataIntegrationERPLiveIntegration_CRM");
+            }
+            else if (ISBCEndpoint())
+            {
+                hasAccess = LicenseManager.LicenseHasFeature("eCom_DataIntegrationERPBatch_BC") || LicenseManager.LicenseHasFeature("eCom_DataIntegrationERPLiveIntegration");
+            }
+            if (!hasAccess)
+            {
+                throw new Exception("License error: no Batch or Live Integration module is installed.");
+            }
+            return hasAccess;
+        }
+
+        private bool IsFOEnpoint(string url)
+        {
+            bool result = false;
+            string response = GetEndpointResponse(url, "/data.svc");
+            if (!string.IsNullOrWhiteSpace(response))
+            {
+                return response.Contains("Microsoft Dynamics 365 Finance and Operations", StringComparison.OrdinalIgnoreCase);
+            }
+            return result;
+        }
+
+        private bool ISCRMEndpoint(string url)
+        {
+            bool result = false;
+            string response = GetEndpointResponse(url, "");
+            if (!string.IsNullOrWhiteSpace(response))
+            {
+                return response.Contains("<title>Microsoft Dynamics 365</title>", StringComparison.OrdinalIgnoreCase);
+            }
+            return result;
+        }
+
+        private bool ISBCEndpoint()
+        {
+            bool result = false;
+            string response = GetEndpointResponse(GetMetadataURL(), "");
+            if (!string.IsNullOrWhiteSpace(response))
+            {
+                return response.Contains("<Schema Namespace=\"Microsoft.NAV\"", StringComparison.OrdinalIgnoreCase)
+                    || response.Contains("<Schema Namespace=\"NAV\"", StringComparison.OrdinalIgnoreCase);
+            }
+            return result;
+        }
+
+        private string GetEndpointResponse(string url, string urlExtension)
+        {
+            Uri checkUri = new Uri(url);
+            string checkUrl = checkUri.GetLeftPart(UriPartial.Authority);
+            checkUrl += urlExtension;
+
+            string result = "";
+            Task task;
+            var endpointAuthentication = _endpoint.Authentication;
+            if (endpointAuthentication.IsTokenBased())
+            {
+                string token = OAuthHelper.GetToken(_endpoint, endpointAuthentication);
+                task = Client.GetAsync(checkUrl, HandleResponse, token);
+            }
+            else
+            {
+                task = Client.GetAsync(checkUrl, HandleResponse, endpointAuthentication);
+            }
+            task.Wait();
+            void HandleResponse(Stream responseStream, HttpStatusCode responseStatusCode, Dictionary<string, string> responseHeaders)
+            {
+                if (responseStatusCode == HttpStatusCode.OK)
+                {
+                    using (var stream = new StreamReader(responseStream))
+                    {
+                        result = stream.ReadToEnd();
+                    }
+                }
+            }
+            return result;
         }
     }
 }

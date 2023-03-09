@@ -4,13 +4,13 @@ using Dynamicweb.DataIntegration.Integration;
 using Dynamicweb.DataIntegration.Integration.Interfaces;
 using Dynamicweb.DataIntegration.Providers.ODataProvider.Model;
 using Dynamicweb.Logging;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using System;
+using System.Text.Json;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
+using System.Text.Json.Nodes;
 
 namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 {
@@ -65,7 +65,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 url = ODataSourceReader.GetEndpointURL(endpointURL, Mapping.DestinationTable.Name, "", parameters);
             }
 
-            var response = GetFromEndpoint<JObject>(url, null);
+            var response = GetFromEndpoint<JsonElement>(url, null);
             url = ODataSourceReader.GetEndpointURL(endpointURL, Mapping.DestinationTable.Name, "");
             Task<RestResponse<string>> awaitResponseFromERP;
             if (response != null && response.Count > 0)
@@ -76,25 +76,25 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                     return;
                 }
 
-                Logger?.Info($"Recieved response from ERP = {response[0].ToString(Formatting.None)}");
+                Logger?.Info($"Recieved response from ERP = {response[0].Deserialize<string>(JsonSerializerOptions.Default)}");
                 Dictionary<string, string> headers = new Dictionary<string, string>() { { "Content-Type", "application/json; charset=utf-8" } };
 
                 List<string> primaryKeyColumnValuesForPatch = new List<string>();
-                foreach (KeyValuePair<string, JToken> item in response[0])
+                foreach (var item in response.First().EnumerateObject())
                 {
-                    if (item.Key.Equals("@odata.etag", StringComparison.OrdinalIgnoreCase))
+                    if (item.Name.Equals("@odata.etag", StringComparison.OrdinalIgnoreCase))
                     {
                         headers.Add("If-Match", item.Value.ToString());
                     }
-                    else if (_destinationPrimaryKeyColumns.TryGetValue(item.Key, out Type columnKeyType))
+                    else if (_destinationPrimaryKeyColumns.TryGetValue(item.Name, out Type columnKeyType))
                     {
                         if (columnKeyType == typeof(string))
                         {
-                            primaryKeyColumnValuesForPatch.Add($"{item.Key}='{item.Value}'");
+                            primaryKeyColumnValuesForPatch.Add($"{item.Name}='{item.Value}'");
                         }
                         else
                         {
-                            primaryKeyColumnValuesForPatch.Add($"{item.Key}={item.Value}");
+                            primaryKeyColumnValuesForPatch.Add($"{item.Name}={item.Value}");
                         }
                     }
                 }
@@ -205,7 +205,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 
         internal string MapValuesToJSon(ColumnMappingCollection columnMappings, Dictionary<string, object> row)
         {
-            JObject jObject = new JObject();
+            var jsonObject = new JsonObject();
 
             foreach (ColumnMapping columnMapping in columnMappings)
             {
@@ -221,22 +221,22 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                         switch (columnMapping.DestinationColumn.Type.Name.ToLower())
                         {
                             case "decimal":
-                                jObject.Add(columnMapping.DestinationColumn.Name, Converter.ToDecimal(columnValue));
+                                jsonObject.Add(columnMapping.DestinationColumn.Name, Converter.ToDecimal(columnValue));
                                 break;
                             case "int":
-                                jObject.Add(columnMapping.DestinationColumn.Name, Converter.ToInt64(columnValue));
+                                jsonObject.Add(columnMapping.DestinationColumn.Name, Converter.ToInt64(columnValue));
                                 break;
                             case "double":
-                                jObject.Add(columnMapping.DestinationColumn.Name, Converter.ToDecimal(columnValue));
+                                jsonObject.Add(columnMapping.DestinationColumn.Name, Converter.ToDecimal(columnValue));
                                 break;
                             default:
-                                jObject.Add(columnMapping.DestinationColumn.Name, Converter.ToString(columnValue));
+                                jsonObject.Add(columnMapping.DestinationColumn.Name, Converter.ToString(columnValue));
                                 break;
                         }
                     }
                 }
             }
-            return jObject.ToString();
+            return jsonObject.ToString();
         }
 
         public void Dispose() { }
