@@ -1,4 +1,5 @@
 ﻿using Dynamicweb.Core;
+using Dynamicweb.Core.Helpers;
 using Dynamicweb.DataIntegration.EndpointManagement;
 using Dynamicweb.DataIntegration.Integration;
 using Dynamicweb.DataIntegration.Integration.Interfaces;
@@ -13,6 +14,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Xml;
 using System.Xml.Linq;
@@ -26,16 +28,20 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
     [AddInUseParameterSectioning(true)]
     public class ODataProvider : BaseProvider, ISource, IDestination, IDropDownOptions
     {
-        internal string _workingDirectory;
         internal readonly EndpointService _endpointService = new EndpointService();
         internal Schema _schema;
         internal Endpoint _endpoint;
         internal ICredentials _credentials;
         internal string _autodetectedMetadataURL;
         internal string _metadataUrl;
-        internal bool _loadAPIFunction = false;
         internal ODataSourceReader _endpointSourceReader;
-        internal IHttpRestClient Client => new HttpRestClient(_credentials, 20); // Unfortunately we need to provide for encapsulated instantiation of the HttpClient due to how ConfigurableAddIns work :(
+        private const string BCBatch = "eCom_DataIntegrationERPBatch_BC";
+        private const string CRMBatch = "eCom_DataIntegrationERPBatch_CRM";
+        private const string FOBatch = "eCom_DataIntegrationERPBatch_FO";
+        private const string CRMCloudRegexPattern = "https:\\/\\/[0-9a-z]+.crm[0-9]*.dynamics.com\\/[0-9a-z]*";
+        private const string FOCloudRegexPattern = "https:\\/\\/[0-9a-z]+.cloudax.dynamics.com\\/data[0-9a-z]*";
+
+        internal IHttpRestClient Client => new HttpRestClient(_credentials, 20);
 
 
         #region AddInManager/ConfigurableAddIn Source
@@ -123,6 +129,8 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 
         #endregion
 
+        private string CheckSum { get; set; }
+
         private string GetMetadataURL()
         {
             if (_endpoint.Url.Contains("companies(", StringComparison.OrdinalIgnoreCase))
@@ -186,13 +194,6 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 }
             }
             return options;
-        }
-
-        /// <inheritdoc />
-        public override string WorkingDirectory
-        {
-            get => _workingDirectory;
-            set => _workingDirectory = value.Replace("\\", "/");
         }
 
         /// <inheritdoc />
@@ -400,14 +401,17 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         /// <inheritdoc />
         public override ISourceReader GetReader(Mapping mapping)
         {
+            if (!CheckLicense())
+            {
+                return null;
+            }
+
             SetCredentials();
             if (!string.IsNullOrEmpty(Mode))
             {
                 RequestIntervals = 0;
                 DoNotStoreLastResponseInLogFile = false;
             }
-            _endpointService.GetEndpoints(); //needed for reset cached Endpoints as the used one is getting updated values, so it will accumulate it's parameters on each run.
-            _endpoint = _endpointService.GetEndpointById(Convert.ToInt32(EndpointId));
             _endpointSourceReader = new ODataSourceReader(new HttpRestClient(_credentials, RequestTimeout), Logger, mapping, _endpoint, Mode, MaximumPageSize, RunLastRequest, RequestIntervals, DoNotStoreLastResponseInLogFile);
             return _endpointSourceReader;
         }
@@ -420,11 +424,35 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 
         public override string ValidateSourceSettings()
         {
+            if (string.IsNullOrEmpty(EndpointId))
+            {
+                return "Predefined endpoint can not be empty. Please select any predefined endpoint.";
+            }
+            else if (_endpoint.Authentication == null)
+            {
+                return "Credentials not set for endpoint, please add credentials before continue.";
+            }
+            if (!CheckLicense())
+            {
+                return "License error: no Batch Integration module is installed for this ERP.";
+            }
             return null;
         }
 
         public override string ValidateDestinationSettings()
         {
+            if (string.IsNullOrEmpty(DestinationEndpointId))
+            {
+                return "Destination endpoint can not be empty. Please select any destination endpoint";
+            }
+            else if (_endpoint.Authentication == null)
+            {
+                return "Credentials not set for endpoint, please add credentials before continue.";
+            }
+            if (!CheckLicense())
+            {
+                return "License error: no Batch Integration module is installed for this ERP.";
+            }
             return null;
         }
 
@@ -454,10 +482,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             GetEntityName();
         }
 
-        public ODataProvider()
-        {
-            _workingDirectory = SystemInformation.MapPath("/Files/");
-        }
+        public ODataProvider() { }
 
         public ODataProvider(XmlNode xmlNode) : this()
         {
@@ -540,6 +565,12 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                             AutodetectedDestinationMetadataURL = node.FirstChild.Value;
                         }
                         break;
+                    case "Checksum":
+                        if (node.HasChildNodes)
+                        {
+                            CheckSum = node.FirstChild.Value;
+                        }
+                        break;
                 }
             }
         }
@@ -561,6 +592,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             root.Add(CreateParameterNode(GetType(), "Destination metadata url", DestinationMetadataURL));
             root.Add(CreateParameterNode(GetType(), "Autodetected metadata url", AutodetectedMetadataURL));
             root.Add(CreateParameterNode(GetType(), "Autodetected destination metadata url", AutodetectedDestinationMetadataURL));
+            root.Add(CreateParameterNode(GetType(), "Checksum", CheckSum));
             return document.ToString();
         }
 
@@ -579,6 +611,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             textWriter.WriteElementString("Destinationmetadataurl", DestinationMetadataURL);
             textWriter.WriteElementString("Autodetectedmetadataurl", AutodetectedMetadataURL);
             textWriter.WriteElementString("Autodetecteddestinationmetadataurl", AutodetectedDestinationMetadataURL);
+            textWriter.WriteElementString("Checksum", CheckSum);
             GetSchema().SaveAsXml(textWriter);
         }
 
@@ -596,10 +629,12 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 
         public override bool RunJob(Job job)
         {
+            if (!CheckLicense())
+            {
+                return false;
+            }
             ReplaceMappingConditionalsWithValuesFromRequest(job);
 
-            _endpointService.GetEndpoints(); //needed for reset cached Endpoints as the used one is getting updated values, so it will accumulate it's parameters on each run.
-            _endpoint = _endpointService.GetEndpointById(Convert.ToInt32(EndpointId));
             Logger?.Log($"Starting OData export.");
             foreach (var mapping in job.Mappings)
             {
@@ -657,21 +692,38 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         {
             bool hasAccess = false;
             string url = _endpoint.Url;
-            if (IsFOEnpoint(url))
+            if (!string.IsNullOrEmpty(CheckSum))
             {
-                hasAccess = LicenseManager.LicenseHasFeature("eCom_DataIntegrationERPBatch_FO") || LicenseManager.LicenseHasFeature("eCom_DataIntegrationERPLiveIntegration_FO");
-            }
-            else if (ISCRMEndpoint(url))
-            {
-                hasAccess = LicenseManager.LicenseHasFeature("eCom_DataIntegrationERPBatch_CRM") || LicenseManager.LicenseHasFeature("eCom_DataIntegrationERPLiveIntegration_CRM");
-            }
-            else if (ISBCEndpoint())
-            {
-                hasAccess = LicenseManager.LicenseHasFeature("eCom_DataIntegrationERPBatch_BC") || LicenseManager.LicenseHasFeature("eCom_DataIntegrationERPLiveIntegration");
+                if (CheckSum == GetCheckSum(url, "/data.svc"))
+                {
+                    hasAccess = LicenseManager.LicenseHasFeature(FOBatch);
+                }
+                else if (CheckSum == GetCheckSum(url, ""))
+                {
+                    hasAccess = LicenseManager.LicenseHasFeature(CRMBatch);
+                }
+                else if (CheckSum == GetCheckSum(GetMetadataURL(), ""))
+                {
+                    hasAccess = LicenseManager.LicenseHasFeature(BCBatch);
+                }
             }
             if (!hasAccess)
             {
-                throw new Exception("License error: no Batch or Live Integration module is installed.");
+                if (Regex.IsMatch(url, FOCloudRegexPattern) || IsFOEnpoint(url))
+                {
+                    hasAccess = LicenseManager.LicenseHasFeature(FOBatch);
+                    CheckSum = GetCheckSum(url, "/data.svc");
+                }
+                else if (Regex.IsMatch(url, CRMCloudRegexPattern) || IsCRMEndpoint(url))
+                {
+                    hasAccess = LicenseManager.LicenseHasFeature(CRMBatch);
+                    CheckSum = GetCheckSum(url, "");
+                }
+                else if (url.StartsWith("https://api.businesscentral.dynamics.com/", StringComparison.OrdinalIgnoreCase) || IsBCEndpoint())
+                {
+                    hasAccess = LicenseManager.LicenseHasFeature(BCBatch);
+                    CheckSum = GetCheckSum(GetMetadataURL(), "");
+                }
             }
             return hasAccess;
         }
@@ -682,30 +734,39 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             string response = GetEndpointResponse(url, "/data.svc");
             if (!string.IsNullOrWhiteSpace(response))
             {
-                return response.Contains("Microsoft Dynamics 365 Finance and Operations", StringComparison.OrdinalIgnoreCase);
+                if (response.Contains("Microsoft Dynamics 365 Finance and Operations", StringComparison.OrdinalIgnoreCase))
+                {
+                    result = true;
+                }
             }
             return result;
         }
 
-        private bool ISCRMEndpoint(string url)
+        private bool IsCRMEndpoint(string url)
         {
             bool result = false;
             string response = GetEndpointResponse(url, "");
             if (!string.IsNullOrWhiteSpace(response))
             {
-                return response.Contains("<title>Microsoft Dynamics 365</title>", StringComparison.OrdinalIgnoreCase);
+                if (response.Contains("<title>Microsoft Dynamics 365</title>", StringComparison.OrdinalIgnoreCase))
+                {
+                    result = true;
+                }
             }
             return result;
         }
 
-        private bool ISBCEndpoint()
+        private bool IsBCEndpoint()
         {
             bool result = false;
             string response = GetEndpointResponse(GetMetadataURL(), "");
             if (!string.IsNullOrWhiteSpace(response))
             {
-                return response.Contains("<Schema Namespace=\"Microsoft.NAV\"", StringComparison.OrdinalIgnoreCase)
-                    || response.Contains("<Schema Namespace=\"NAV\"", StringComparison.OrdinalIgnoreCase);
+                if (response.Contains("<Schema Namespace=\"Microsoft.NAV\"", StringComparison.OrdinalIgnoreCase)
+                    || response.Contains("<Schema Namespace=\"NAV\"", StringComparison.OrdinalIgnoreCase))
+                {
+                    result = true;
+                }
             }
             return result;
         }
@@ -740,6 +801,14 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 }
             }
             return result;
+        }
+
+        private string GetCheckSum(string url, string urlExtension)
+        {
+            List<string> stringsToJoin = new List<string>() { url, urlExtension };
+            stringsToJoin.AddRange(_endpoint.Authentication.Parameters.Select(obj => obj.Key));
+            string result = string.Join("_", stringsToJoin);
+            return StringHelper.Md5HashToString(result);
         }
     }
 }
