@@ -47,7 +47,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         #region AddInManager/ConfigurableAddIn Source
 
         [AddInParameter("Predefined endpoint")]
-        [AddInParameterEditor(typeof(DropDownParameterEditor), "none=true;refreshParameters=true;required=true")]
+        [AddInParameterEditor(typeof(GroupedDropDownParameterEditor), "none=true;refreshParameters=true;required=true")]
         [AddInParameterGroup("Source")]
         [AddInParameterSection("Source")]
         public string EndpointId
@@ -186,11 +186,19 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 options.Add("Delta Replication", "Delta replication|This mode filters records on date and time, whenever possible, and it only acts on new or updated records. It never deletes.");
                 options.Add("First page", "First page|If maximum page size is 100 then this setting only handles the 100 records of the first page.");
             }
-            if (name == "Predefined endpoint" || name == "Destination endpoint")
+            if (name == "Destination endpoint")
             {
                 foreach (var endpoint in _endpointService.GetEndpoints())
                 {
                     options.Add(endpoint.Id, endpoint.Name);
+                }
+            }
+            if (name == "Predefined endpoint")
+            {
+                var endpoints = _endpointService.GetEndpoints();
+                foreach (var endpoint in endpoints)
+                {
+                    options.Add(endpoint.Id, new GroupedDropDownParameterEditor.DropDownItem(endpoint.Name, endpoint.Collection != null ? endpoint.Collection.Name : "Dynamicweb 9 Endpoints", endpoint.Id.ToString()));
                 }
             }
             return options;
