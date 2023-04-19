@@ -2,6 +2,7 @@
 using Dynamicweb.Core.Helpers;
 using Dynamicweb.DataIntegration.EndpointManagement;
 using Dynamicweb.DataIntegration.Integration;
+using Dynamicweb.DataIntegration.Integration.ERPIntegration;
 using Dynamicweb.DataIntegration.Integration.Interfaces;
 using Dynamicweb.DataIntegration.Providers.ODataProvider.Interfaces;
 using Dynamicweb.DataIntegration.Providers.ODataProvider.Model;
@@ -9,7 +10,6 @@ using Dynamicweb.Extensibility.AddIns;
 using Dynamicweb.Extensibility.Editors;
 using Dynamicweb.Security.Licensing;
 using System;
-using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -26,7 +26,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
     [AddInDescription("OData provider")]
     [AddInIgnore(false)]
     [AddInUseParameterSectioning(true)]
-    public class ODataProvider : BaseProvider, ISource, IDestination, IDropDownOptions
+    public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOptions, IODataBaseProvider
     {
         internal readonly EndpointService _endpointService = new EndpointService();
         internal Schema _schema;
@@ -109,7 +109,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         #region AddInManager/ConfigurableAddIn Destination
 
         [AddInParameter("Destination endpoint")]
-        [AddInParameterEditor(typeof(DropDownParameterEditor), "none=true;refreshParameters=true;required=true")]
+        [AddInParameterEditor(typeof(GroupedDropDownParameterEditor), "none=true;refreshParameters=true;required=true")]
         [AddInParameterGroup("Destination")]
         public string DestinationEndpointId
         {
@@ -133,31 +133,31 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 
         private string GetMetadataURL()
         {
-            if (_endpoint.Url.Contains("companies(", StringComparison.OrdinalIgnoreCase))
-            {
-                _autodetectedMetadataURL = _endpoint.Url.Substring(0, _endpoint.Url.IndexOf("companies(", StringComparison.OrdinalIgnoreCase)) + "$metadata";
-            }
-            else if (_endpoint.Url.Contains("company(", StringComparison.OrdinalIgnoreCase))
-            {
-                _autodetectedMetadataURL = _endpoint.Url.Substring(0, _endpoint.Url.IndexOf("company(", StringComparison.OrdinalIgnoreCase)) + "$metadata";
-            }
-            else
-            {
-                _autodetectedMetadataURL = new Uri(new Uri(_endpoint.Url), "$metadata").AbsoluteUri;
-            }
-            if (string.IsNullOrEmpty(_metadataUrl))
-            {
-                return _autodetectedMetadataURL;
-            }
-            else
+            if (!string.IsNullOrEmpty(_metadataUrl))
             {
                 return _metadataUrl;
             }
+            else if (_endpoint != null)
+            {
+                if (_endpoint.Url.Contains("companies(", StringComparison.OrdinalIgnoreCase))
+                {
+                    _autodetectedMetadataURL = _endpoint.Url.Substring(0, _endpoint.Url.IndexOf("companies(", StringComparison.OrdinalIgnoreCase)) + "$metadata";
+                }
+                else if (_endpoint.Url.Contains("company(", StringComparison.OrdinalIgnoreCase))
+                {
+                    _autodetectedMetadataURL = _endpoint.Url.Substring(0, _endpoint.Url.IndexOf("company(", StringComparison.OrdinalIgnoreCase)) + "$metadata";
+                }
+                else
+                {
+                    _autodetectedMetadataURL = new Uri(new Uri(_endpoint.Url), "$metadata").AbsoluteUri;
+                }
+            }
+            return _autodetectedMetadataURL;
         }
 
         private string GetEntityName()
         {
-            return new Uri(_endpoint.Url).Segments.LastOrDefault() ?? _endpoint.Name;
+            return _endpoint != null ? (new Uri(_endpoint.Url).Segments.LastOrDefault() ?? _endpoint.Name) : "";
         }
 
         internal void SetCredentials()
@@ -178,27 +178,22 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         }
 
         /// <inheritdoc />
-        public Hashtable GetOptions(string name)
+        public IEnumerable<ParameterOption> GetParameterOptions(string parameterName)
         {
-            Hashtable options = new Hashtable();
-            if (name == "Mode")
+            var options = new List<ParameterOption>();
+            if (parameterName == "Mode")
             {
-                options.Add("Delta Replication", "Delta replication|This mode filters records on date and time, whenever possible, and it only acts on new or updated records. It never deletes.");
-                options.Add("First page", "First page|If maximum page size is 100 then this setting only handles the 100 records of the first page.");
+                options.Add(new ParameterOption("Delta replication|This mode filters records on date and time, whenever possible, and it only acts on new or updated records. It never deletes.", "Delta Replication"));
+                options.Add(new ParameterOption("First page|If maximum page size is 100 then this setting only handles the 100 records of the first page.", "First page"));
             }
-            if (name == "Destination endpoint")
-            {
-                foreach (var endpoint in _endpointService.GetEndpoints())
-                {
-                    options.Add(endpoint.Id, endpoint.Name);
-                }
-            }
-            if (name == "Predefined endpoint")
+            if (parameterName == "Predefined endpoint" || parameterName == "Destination endpoint")
             {
                 var endpoints = _endpointService.GetEndpoints();
                 foreach (var endpoint in endpoints)
                 {
-                    options.Add(endpoint.Id, new GroupedDropDownParameterEditor.DropDownItem(endpoint.Name, endpoint.Collection != null ? endpoint.Collection.Name : "Dynamicweb 9 Endpoints", endpoint.Id.ToString()));
+                    var value = new GroupedDropDownParameterEditor.DropDownItem(endpoint.Name, endpoint.Collection != null ? endpoint.Collection.Name : "Dynamicweb 9 Endpoints", endpoint.Id.ToString());
+                    var option = new ParameterOption(endpoint.Name, value) { Group = endpoint.Collection != null ? endpoint.Collection.Name : "Dynamicweb 9 Endpoints" };
+                    options.Add(option);
                 }
             }
             return options;
@@ -206,6 +201,19 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 
         /// <inheritdoc />
         public override bool SchemaIsEditable => false;
+
+        private ErpType? _erpType = null;
+
+        public ErpType ErpType
+        {
+            get
+            {
+                if (_erpType is null)
+                    CheckLicense();
+                return !_erpType.HasValue ? ErpType.Undefined : _erpType.Value;
+            }
+        }
+
 
         /// <inheritdoc />
         public override Schema GetSchema()
@@ -436,7 +444,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             {
                 return "Predefined endpoint can not be empty. Please select any predefined endpoint.";
             }
-            else if (_endpoint.Authentication == null)
+            else if (_endpoint?.Authentication == null)
             {
                 return "Credentials not set for endpoint, please add credentials before continue.";
             }
@@ -453,7 +461,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             {
                 return "Destination endpoint can not be empty. Please select any destination endpoint";
             }
-            else if (_endpoint.Authentication == null)
+            else if (_endpoint?.Authentication == null)
             {
                 return "Credentials not set for endpoint, please add credentials before continue.";
             }
@@ -699,39 +707,78 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         private bool CheckLicense()
         {
             bool hasAccess = false;
-            string url = _endpoint.Url;
+            string url = _endpoint?.Url;
             if (!string.IsNullOrEmpty(CheckSum))
             {
                 if (CheckSum == GetCheckSum(url, "/data.svc"))
                 {
                     hasAccess = LicenseManager.LicenseHasFeature(FOBatch);
+                    _erpType = ErpType.FinanceAndOperations;
                 }
                 else if (CheckSum == GetCheckSum(url, ""))
                 {
                     hasAccess = LicenseManager.LicenseHasFeature(CRMBatch);
+                    _erpType = ErpType.CRM;
                 }
                 else if (CheckSum == GetCheckSum(GetMetadataURL(), ""))
                 {
                     hasAccess = LicenseManager.LicenseHasFeature(BCBatch);
+                    _erpType = ErpType.BusinessCentral;
                 }
             }
-            if (!hasAccess)
+            if (!hasAccess && !string.IsNullOrEmpty(url))
             {
-                if (Regex.IsMatch(url, FOCloudRegexPattern) || IsFOEnpoint(url))
+                ErpType? type = null;
+                if (Regex.IsMatch(url, FOCloudRegexPattern))
                 {
-                    hasAccess = LicenseManager.LicenseHasFeature(FOBatch);
-                    CheckSum = GetCheckSum(url, "/data.svc");
+                    type = ErpType.FinanceAndOperations;
                 }
-                else if (Regex.IsMatch(url, CRMCloudRegexPattern) || IsCRMEndpoint(url))
+                else if (Regex.IsMatch(url, CRMCloudRegexPattern))
                 {
-                    hasAccess = LicenseManager.LicenseHasFeature(CRMBatch);
-                    CheckSum = GetCheckSum(url, "");
+                    type = ErpType.CRM;
                 }
-                else if (url.StartsWith("https://api.businesscentral.dynamics.com/", StringComparison.OrdinalIgnoreCase) || IsBCEndpoint())
+                else if (url.StartsWith("https://api.businesscentral.dynamics.com/", StringComparison.OrdinalIgnoreCase))
                 {
-                    hasAccess = LicenseManager.LicenseHasFeature(BCBatch);
-                    CheckSum = GetCheckSum(GetMetadataURL(), "");
+                    type = ErpType.BusinessCentral;
                 }
+                if (type is null)
+                {
+                    if (IsBCEndpoint())
+                    {
+                        type = ErpType.BusinessCentral;
+                    }
+                    else if (IsFOEnpoint(url))
+                    {
+                        type = ErpType.FinanceAndOperations;
+                    }
+                    else if (IsCRMEndpoint(url))
+                    {
+                        type = ErpType.CRM;
+                    }
+                }
+                if (type != null)
+                {
+                    switch (type.Value)
+                    {
+                        case ErpType.BusinessCentral:
+                            hasAccess = LicenseManager.LicenseHasFeature(BCBatch);
+                            CheckSum = GetCheckSum(GetMetadataURL(), "");
+                            break;
+                        case ErpType.FinanceAndOperations:
+                            hasAccess = LicenseManager.LicenseHasFeature(FOBatch);
+                            CheckSum = GetCheckSum(url, "/data.svc");
+                            break;
+                        case ErpType.CRM:
+                            hasAccess = LicenseManager.LicenseHasFeature(CRMBatch);
+                            CheckSum = GetCheckSum(url, "");
+                            break;
+                    }
+                    _erpType = type;
+                }
+            }
+            if (_erpType is null)
+            {
+                _erpType = ErpType.Undefined;
             }
             return hasAccess;
         }
@@ -781,42 +828,51 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 
         private string GetEndpointResponse(string url, string urlExtension)
         {
-            Uri checkUri = new Uri(url);
-            string checkUrl = checkUri.GetLeftPart(UriPartial.Authority);
-            checkUrl += urlExtension;
+            try
+            {
+                Uri checkUri = new Uri(url);
+                string checkUrl = checkUri.GetLeftPart(UriPartial.Authority);
+                checkUrl += urlExtension;
 
-            string result = "";
-            Task task;
-            var endpointAuthentication = _endpoint.Authentication;
-            if (endpointAuthentication.IsTokenBased())
-            {
-                string token = OAuthHelper.GetToken(_endpoint, endpointAuthentication);
-                task = Client.GetAsync(checkUrl, HandleResponse, token);
-            }
-            else
-            {
-                task = Client.GetAsync(checkUrl, HandleResponse, endpointAuthentication);
-            }
-            task.Wait();
-            void HandleResponse(Stream responseStream, HttpStatusCode responseStatusCode, Dictionary<string, string> responseHeaders)
-            {
-                if (responseStatusCode == HttpStatusCode.OK)
+                string result = "";
+                Task task;
+                var endpointAuthentication = _endpoint.Authentication;
+                if (endpointAuthentication.IsTokenBased())
                 {
-                    using (var stream = new StreamReader(responseStream))
+                    string token = OAuthHelper.GetToken(_endpoint, endpointAuthentication);
+                    task = Client.GetAsync(checkUrl, HandleResponse, token);
+                }
+                else
+                {
+                    task = Client.GetAsync(checkUrl, HandleResponse, endpointAuthentication);
+                }
+                task.Wait();
+                void HandleResponse(Stream responseStream, HttpStatusCode responseStatusCode, Dictionary<string, string> responseHeaders)
+                {
+                    if (responseStatusCode == HttpStatusCode.OK)
                     {
-                        result = stream.ReadToEnd();
+                        using (var stream = new StreamReader(responseStream))
+                        {
+                            result = stream.ReadToEnd();
+                        }
                     }
                 }
+                return result;
             }
-            return result;
+            catch (Exception ex)
+            {
+                Logger?.Error($"Error GetEndpointResponse url: {url} urlextenions: {urlExtension}", ex);
+            }
+            return null;
         }
 
         private string GetCheckSum(string url, string urlExtension)
         {
             List<string> stringsToJoin = new List<string>() { url, urlExtension };
-            stringsToJoin.AddRange(_endpoint.Authentication.Parameters.Select(obj => obj.Key));
+            if (_endpoint != null && _endpoint.Authentication != null && _endpoint.Authentication.Parameters != null)
+                stringsToJoin.AddRange(_endpoint.Authentication.Parameters.Select(obj => obj.Key));
             string result = string.Join("_", stringsToJoin);
             return StringHelper.Md5HashToString(result);
-        }
+        }       
     }
 }
