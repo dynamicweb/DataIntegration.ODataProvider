@@ -199,21 +199,13 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                     }
 
                 case "Destination endpoint":
-                    {
-                        var result = new List<ParameterOption>();
-                        foreach (var endpoint in _endpointService.GetEndpoints())
-                        {
-                            result.Add(new(endpoint.Name, endpoint.Id.ToString()));
-                        }
-                        return result;
-                    }
-
                 case "Predefined endpoint":
                     {
                         var result = new List<ParameterOption>();
                         foreach (var endpoint in _endpointService.GetEndpoints())
                         {
-                            result.Add(new(endpoint.Name, new GroupedDropDownParameterEditor.DropDownItem(endpoint.Name, endpoint.Collection != null ? endpoint.Collection.Name : "Dynamicweb 9 Endpoints", endpoint.Id.ToString())));
+                            var value = new GroupedDropDownParameterEditor.DropDownItem(endpoint.Name, endpoint.Collection != null ? endpoint.Collection.Name : "Dynamicweb 9 Endpoints", endpoint.Id.ToString());
+                            result.Add(new(endpoint.Name, value) { Group = endpoint.Collection != null ? endpoint.Collection.Name : "Dynamicweb 9 Endpoints" });
                         }
                         return result;
                     }
