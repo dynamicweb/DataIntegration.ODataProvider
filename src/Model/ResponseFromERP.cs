@@ -1,15 +1,15 @@
-﻿using Newtonsoft.Json;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
+using System.Text.Json.Serialization;
 
 namespace Dynamicweb.DataIntegration.Providers.ODataProvider.Model
 {
     internal class ResponseFromERP<T>
     {
-        [JsonProperty("@odata.context")]
+        [JsonPropertyName("@odata.context")]
         public string Odata { get; set; }
-        [JsonProperty("value")]
+        [JsonPropertyName("value")]
         public List<T> Value { get; set; }
-        [JsonProperty("@odata.nextLink")]
+        [JsonPropertyName("@odata.nextLink")]
         public string OdataNextLink { get; set; }
     }
 }

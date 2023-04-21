@@ -5,7 +5,6 @@ using Dynamicweb.DataIntegration.Integration.Interfaces;
 using Dynamicweb.DataIntegration.Providers.ODataProvider.Interfaces;
 using Dynamicweb.DataIntegration.Providers.ODataProvider.Model;
 using Dynamicweb.Logging;
-using Newtonsoft.Json;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
@@ -13,6 +12,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
 
@@ -54,8 +54,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 string logFileName = Scheduling.Task.MakeSafeFileName(_mapping.Job.Name) + $"_{_mapping.SourceTable.Name}.log";
                 using (TextWriter writer = File.CreateText(mapPath.CombinePaths(logFileName)))
                 {
-                    var serializer = new JsonSerializer();
-                    serializer.Serialize(writer, _totalResponseResult);
+                    writer.Write(JsonSerializer.Serialize(_totalResponseResult));
                 }
             }
         }
@@ -72,7 +71,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             {
                 File.Delete(mapPath.CombinePaths(logFileName));
             }
-            File.WriteAllText(mapPath.CombinePaths(logFileName), JsonConvert.SerializeObject(sourceRow));
+            File.WriteAllText(mapPath.CombinePaths(logFileName), JsonSerializer.Serialize(sourceRow));
         }
 
         private void DeleteHighWaterMarkFile()
@@ -111,7 +110,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 
             if (File.Exists(_highWaterMarkMapPath.CombinePaths(logFileName)))
             {
-                _responseResult = JsonConvert.DeserializeObject<IEnumerable<Dictionary<string, object>>>(File.ReadAllText(_highWaterMarkMapPath.CombinePaths(logFileName)));
+                _responseResult = JsonSerializer.Deserialize<IEnumerable<Dictionary<string, object>>>(File.ReadAllText(_highWaterMarkMapPath.CombinePaths(logFileName)));
                 if (_responseResult.First().TryGetValue("@odata.nextLink", out var paginationUrl))
                 {
                     HandleRequest(paginationUrl.ToString(), $"Starting reading data from endpoint: '{_endpoint.Name}', using URL: '{paginationUrl}'", headers);
@@ -120,7 +119,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             }
             else if (readFromLastRequestResponse && File.Exists(_requestResponseMapPath.CombinePaths(logFileName)))
             {
-                _responseResult = _totalResponseResult = JsonConvert.DeserializeObject<List<Dictionary<string, object>>>(File.ReadAllText(_requestResponseMapPath.CombinePaths(logFileName)));
+                _responseResult = _totalResponseResult = JsonSerializer.Deserialize<List<Dictionary<string, object>>>(File.ReadAllText(_requestResponseMapPath.CombinePaths(logFileName)));
                 _responseEnumerator = _responseResult.GetEnumerator();
             }
             else
@@ -378,55 +377,47 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         /// <returns></returns>
         private IEnumerable<Dictionary<string, object>> ExtractStream(Stream responseStream)
         {
-            var serializer = new JsonSerializer();
-
-            using (var streamReader = new StreamReader(responseStream))
+            var something = JsonDocument.Parse(responseStream);
+            foreach (var item in something.RootElement.EnumerateObject())
             {
-                using (var jsonTextReader = new JsonTextReader(streamReader))
+                if (item.Name.StartsWith("value", StringComparison.OrdinalIgnoreCase))
                 {
-                    // Iterate through the Stream
-                    while (jsonTextReader.Read())
+                    List<Dictionary<string, object>> deserializedJsons = JsonSerializer.Deserialize<List<Dictionary<string, object>>>(item.Value.GetRawText());
+                    foreach (var deserializedJson in deserializedJsons)
                     {
-                        // If this is a dataobject yield return it
-                        if (jsonTextReader.TokenType == JsonToken.StartObject && jsonTextReader.Path.Contains("value["))
+                        if (!_hasFormattedValues.HasValue)
                         {
-                            Dictionary<string, object> deserializedJson = serializer.Deserialize<Dictionary<string, object>>(jsonTextReader);
-                            if (!_hasFormattedValues.HasValue)
+                            _hasFormattedValues = deserializedJson.Any(kvp => kvp.Key.Contains($"@{_odataFormattedValue}", StringComparison.OrdinalIgnoreCase));
+                        }
+                        if (_hasFormattedValues.Value)
+                        {
+                            var columnMappings = _mapping.SourceTable.Columns;
+                            var listOfBooleans = columnMappings.Where(obj => obj.Type == typeof(bool));
+                            var keyValuePairsWithFormattedValues = deserializedJson.Where(obj => obj.Key.Contains($"@{_odataFormattedValue}", StringComparison.OrdinalIgnoreCase)).ToList();
+                            foreach (var kvpwf in keyValuePairsWithFormattedValues)
                             {
-                                _hasFormattedValues = deserializedJson.Any(kvp => kvp.Key.Contains($"@{_odataFormattedValue}", StringComparison.OrdinalIgnoreCase));
-                            }
-                            if (_hasFormattedValues.Value)
-                            {
-                                var columnMappings = _mapping.SourceTable.Columns;
-                                var listOfBooleans = columnMappings.Where(obj => obj.Type == typeof(bool));
-                                var keyValuePairsWithFormattedValues = deserializedJson.Where(obj => obj.Key.Contains($"@{_odataFormattedValue}", StringComparison.OrdinalIgnoreCase)).ToList();
-                                foreach (var item in keyValuePairsWithFormattedValues)
+                                string key = kvpwf.Key.Replace($"@{_odataFormattedValue}", "");
+                                if (!listOfBooleans.Any(obj => obj.Name == key))
                                 {
-                                    string key = item.Key.Replace($"@{_odataFormattedValue}", "");
-                                    if (!listOfBooleans.Any(obj => obj.Name == key))
-                                    {
-                                        deserializedJson[key] = item.Value;
-                                    }
+                                    deserializedJson[key] = kvpwf.Value;
                                 }
                             }
-                            if (!_doNotStoreLastResponseInLogFile)
-                            {
-                                _totalResponseResult.Add(deserializedJson);
-                            }
-                            yield return deserializedJson;
                         }
-
-                        // If this is a pagination link store it for later pagination
-                        if (jsonTextReader.TokenType == JsonToken.PropertyName && jsonTextReader.Path.Contains(_nextPaginationUrlName)) //Todo: Make case insensitive once new DW.Core package is out with Contains extension
+                        if (!_doNotStoreLastResponseInLogFile)
                         {
-                            _paginationUrl = jsonTextReader.ReadAsString();
+                            _totalResponseResult.Add(deserializedJson);
                         }
+                        yield return deserializedJson;
                     }
+                }
 
-                    // If we reach the end of the Stream yield return null.
-                    yield return null;
+                // If this is a pagination link store it for later pagination
+                else if (item.Name.Contains(_nextPaginationUrlName, StringComparison.OrdinalIgnoreCase))
+                {
+                    _paginationUrl = JsonSerializer.Deserialize<string>(item.Value.GetRawText());
                 }
             }
+            yield return null;
         }
 
         private bool HandleRequest(string url, string loggerInfo, IDictionary<string, string> headers)

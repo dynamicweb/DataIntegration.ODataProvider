@@ -1,13 +1,14 @@
 ﻿using Dynamicweb.DataIntegration.EndpointManagement;
 using Dynamicweb.DataIntegration.Providers.ODataProvider.Interfaces;
 using Dynamicweb.Logging;
-using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Net;
 using System.Net.Http;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace Dynamicweb.DataIntegration.Providers.ODataProvider.Model
@@ -234,7 +235,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider.Model
 
                 var stringContent = input is string strInput ?
                     strInput :
-                    JObject.FromObject(input).ToString();
+                    JsonSerializer.Serialize(input);
 
                 using (var content = new StringContent(stringContent))
                 {
@@ -323,7 +324,8 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider.Model
                             Status = response.StatusCode,
                             Headers = responseHeaders,
                         };
-                        _logger?.Error($"ERP error: {responseContent} Status: {response.StatusCode} Headers: {responseHeaders}");
+                        var listOfHeaders = responseHeaders.Select(obj => $"{obj.Key}:{obj.Value}").ToList();
+                        _logger?.Error($"ERP error: {responseContent} Status: {response.StatusCode} Headers: {string.Join(",", listOfHeaders)}");
                         return responseResult;
                     }
                     else
@@ -352,18 +354,8 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider.Model
                         }
                         else
                         {
-                            /*
-                             * Check if the caller is interested in some sort of JContainer, such as a JArray or JObject,
-                             * at which point we simply return the above object immediately as such.
-                             */
-                            var objResult = JToken.Parse(responseContent);
-                            if (typeof(TResponse) == typeof(JContainer))
-                            {
-                                responseResult.Content = (TResponse)(object)objResult;
-                            }
-
                             //Converting above JContainer to instance of requested type, and returns object to caller.
-                            responseResult.Content = objResult.ToObject<TResponse>();
+                            responseResult.Content = JsonSerializer.Deserialize<TResponse>(responseContent);
                         }
 
                         // Finally, we can return result to caller.
