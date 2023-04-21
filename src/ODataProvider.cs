@@ -26,7 +26,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
     [AddInDescription("OData provider")]
     [AddInIgnore(false)]
     [AddInUseParameterSectioning(true)]
-    public class ODataProvider : BaseProvider, ISource, IDestination, IDropDownOptions
+    public class ODataProvider : BaseProvider, ISource, IDestination, IDropDownOptions, IParameterOptions
     {
         internal readonly EndpointService _endpointService = new EndpointService();
         internal Schema _schema;
@@ -109,7 +109,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         #region AddInManager/ConfigurableAddIn Destination
 
         [AddInParameter("Destination endpoint")]
-        [AddInParameterEditor(typeof(DropDownParameterEditor), "none=true;refreshParameters=true;required=true")]
+        [AddInParameterEditor(typeof(GroupedDropDownParameterEditor), "none=true;refreshParameters=true;required=true")]
         [AddInParameterGroup("Destination")]
         public string DestinationEndpointId
         {
@@ -178,30 +178,43 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         }
 
         /// <inheritdoc />
+        [Obsolete("Don't use it")]
         public Hashtable GetOptions(string name)
         {
-            Hashtable options = new Hashtable();
-            if (name == "Mode")
+            var options = ((IParameterOptions)this).GetParameterOptions(name);
+            return new Hashtable(options.ToDictionary(p => p.Value, p => p.Label));
+        }
+
+        IEnumerable<ParameterOption> IParameterOptions.GetParameterOptions(string parameterName)
+        {
+            switch (parameterName ?? "")
             {
-                options.Add("Delta Replication", "Delta replication|This mode filters records on date and time, whenever possible, and it only acts on new or updated records. It never deletes.");
-                options.Add("First page", "First page|If maximum page size is 100 then this setting only handles the 100 records of the first page.");
+                case "Mode":
+                    {
+                        return new List<ParameterOption>()
+                        {
+                            { new("Delta replication|This mode filters records on date and time, whenever possible, and it only acts on new or updated records. It never deletes.","Delta Replication") },
+                            { new("First page|If maximum page size is 100 then this setting only handles the 100 records of the first page.", "First page") }
+                        };
+                    }
+
+                case "Destination endpoint":
+                case "Predefined endpoint":
+                    {
+                        var result = new List<ParameterOption>();
+                        foreach (var endpoint in _endpointService.GetEndpoints())
+                        {
+                            var value = new GroupedDropDownParameterEditor.DropDownItem(endpoint.Name, endpoint.Collection != null ? endpoint.Collection.Name : "Dynamicweb 9 Endpoints", endpoint.Id.ToString());
+                            result.Add(new(endpoint.Name, value) { Group = endpoint.Collection != null ? endpoint.Collection.Name : "Dynamicweb 9 Endpoints" });
+                        }
+                        return result;
+                    }
+
+                default:
+                    {
+                        return null;
+                    }
             }
-            if (name == "Destination endpoint")
-            {
-                foreach (var endpoint in _endpointService.GetEndpoints())
-                {
-                    options.Add(endpoint.Id, endpoint.Name);
-                }
-            }
-            if (name == "Predefined endpoint")
-            {
-                var endpoints = _endpointService.GetEndpoints();
-                foreach (var endpoint in endpoints)
-                {
-                    options.Add(endpoint.Id, new GroupedDropDownParameterEditor.DropDownItem(endpoint.Name, endpoint.Collection != null ? endpoint.Collection.Name : "Dynamicweb 9 Endpoints", endpoint.Id.ToString()));
-                }
-            }
-            return options;
         }
 
         /// <inheritdoc />
