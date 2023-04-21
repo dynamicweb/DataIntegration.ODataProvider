@@ -109,7 +109,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         #region AddInManager/ConfigurableAddIn Destination
 
         [AddInParameter("Destination endpoint")]
-        [AddInParameterEditor(typeof(DropDownParameterEditor), "none=true;refreshParameters=true;required=true")]
+        [AddInParameterEditor(typeof(GroupedDropDownParameterEditor), "none=true;refreshParameters=true;required=true")]
         [AddInParameterGroup("Destination")]
         public string DestinationEndpointId
         {
