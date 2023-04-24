@@ -330,18 +330,45 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                             break;
                         case ConditionalOperator.Contains:
                             result.Add($"contains({item.SourceColumn.Name},'{item.Condition}')");
-                            continue;
+                            break;
+                        case ConditionalOperator.NotContains:
+                            result.Add($"contains({item.SourceColumn.Name},'{item.Condition}') ne true");
+                            break;
                         case ConditionalOperator.In:
                             operatorInOData = "eq";
-                            List<string> conditions = item.Condition.Split(',').ToList();
+                            List<string> equalConditions = item.Condition.Split(',').ToList();
                             if (item.SourceColumn.Type == typeof(string))
                             {
-                                condition = $"{string.Join($"' or {item.SourceColumn.Name} eq '", conditions)}";
+                                condition = $"{string.Join($"' or {item.SourceColumn.Name} eq '", equalConditions)}";
                             }
                             else
                             {
-                                condition = $"{string.Join($" or {item.SourceColumn.Name} eq ", conditions)}";
+                                condition = $"{string.Join($" or {item.SourceColumn.Name} eq ", equalConditions)}";
                             }
+                            break;
+                        case ConditionalOperator.NotIn:
+                            operatorInOData = "ne";
+                            List<string> notEqualConditions = item.Condition.Split(',').ToList();
+                            if (item.SourceColumn.Type == typeof(string))
+                            {
+                                condition = $"{string.Join($"' and {item.SourceColumn.Name} ne '", notEqualConditions)}";
+                            }
+                            else
+                            {
+                                condition = $"{string.Join($" and {item.SourceColumn.Name} ne ", notEqualConditions)}";
+                            }
+                            break;
+                        case ConditionalOperator.StartsWith:
+                            result.Add($"startswith({item.SourceColumn.Name},'{item.Condition}')");
+                            break;
+                        case ConditionalOperator.NotStartsWith:
+                            result.Add($"startswith({item.SourceColumn.Name},'{item.Condition}') ne true");
+                            break;
+                        case ConditionalOperator.EndsWith:
+                            result.Add($"endswith({item.SourceColumn.Name},'{item.Condition}')");
+                            break;
+                        case ConditionalOperator.NotEndsWith:
+                            result.Add($"endswith({item.SourceColumn.Name},'{item.Condition}') ne true");
                             break;
 
                     }
