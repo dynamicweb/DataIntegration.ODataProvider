@@ -409,32 +409,33 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             {
                 if (item.Name.StartsWith("value", StringComparison.OrdinalIgnoreCase))
                 {
-                    List<Dictionary<string, object>> deserializedJsons = JsonSerializer.Deserialize<List<Dictionary<string, object>>>(item.Value.GetRawText());
+                    List<Dictionary<string, JsonElement>> deserializedJsons = JsonSerializer.Deserialize<List<Dictionary<string, JsonElement>>>(item.Value.GetRawText());
                     foreach (var deserializedJson in deserializedJsons)
                     {
+                        var deserializedDictionary = deserializedJson.ToDictionary(obj => obj.Key, obj => obj.Value.ValueKind == JsonValueKind.String ? (object)obj.Value.GetString() : (object)obj.Value.GetRawText());
                         if (!_hasFormattedValues.HasValue)
                         {
-                            _hasFormattedValues = deserializedJson.Any(kvp => kvp.Key.Contains($"@{_odataFormattedValue}", StringComparison.OrdinalIgnoreCase));
+                            _hasFormattedValues = deserializedDictionary.Any(kvp => kvp.Key.Contains($"@{_odataFormattedValue}", StringComparison.OrdinalIgnoreCase));
                         }
                         if (_hasFormattedValues.Value)
                         {
                             var columnMappings = _mapping.SourceTable.Columns;
                             var listOfBooleans = columnMappings.Where(obj => obj.Type == typeof(bool));
-                            var keyValuePairsWithFormattedValues = deserializedJson.Where(obj => obj.Key.Contains($"@{_odataFormattedValue}", StringComparison.OrdinalIgnoreCase)).ToList();
+                            var keyValuePairsWithFormattedValues = deserializedDictionary.Where(obj => obj.Key.Contains($"@{_odataFormattedValue}", StringComparison.OrdinalIgnoreCase)).ToList();
                             foreach (var kvpwf in keyValuePairsWithFormattedValues)
                             {
                                 string key = kvpwf.Key.Replace($"@{_odataFormattedValue}", "");
                                 if (!listOfBooleans.Any(obj => obj.Name == key))
                                 {
-                                    deserializedJson[key] = kvpwf.Value;
+                                    deserializedDictionary[key] = kvpwf.Value;
                                 }
                             }
                         }
                         if (!_doNotStoreLastResponseInLogFile)
                         {
-                            _totalResponseResult.Add(deserializedJson);
+                            _totalResponseResult.Add(deserializedDictionary);
                         }
-                        yield return deserializedJson;
+                        yield return deserializedDictionary;
                     }
                 }
 
