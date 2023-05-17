@@ -5,12 +5,11 @@ using Dynamicweb.DataIntegration.Integration.Interfaces;
 using Dynamicweb.DataIntegration.Providers.ODataProvider.Model;
 using Dynamicweb.Logging;
 using System;
-using System.Text.Json;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
-using System.Threading.Tasks;
 using System.Text.Json.Nodes;
+using System.Threading.Tasks;
 
 namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 {
@@ -65,7 +64,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 url = ODataSourceReader.GetEndpointURL(endpointURL, Mapping.DestinationTable.Name, "", parameters);
             }
 
-            var response = GetFromEndpoint<JsonElement>(url, null);
+            var response = GetFromEndpoint<JsonObject>(url, null);
             url = ODataSourceReader.GetEndpointURL(endpointURL, Mapping.DestinationTable.Name, "");
             Task<RestResponse<string>> awaitResponseFromERP;
             if (response != null && response.Count > 0)
@@ -75,26 +74,26 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                     Logger?.Error($"The filter returned too many records, please update or change filter.");
                     return;
                 }
-
-                Logger?.Info($"Recieved response from ERP = {response[0].Deserialize<string>(JsonSerializerOptions.Default)}");
+                var jObject = response[0];
+                Logger?.Info($"Recieved response from ERP = {jObject.ToJsonString()}");
                 Dictionary<string, string> headers = new Dictionary<string, string>() { { "Content-Type", "application/json; charset=utf-8" } };
 
                 List<string> primaryKeyColumnValuesForPatch = new List<string>();
-                foreach (var item in response.First().EnumerateObject())
+                foreach (var item in jObject)
                 {
-                    if (item.Name.Equals("@odata.etag", StringComparison.OrdinalIgnoreCase))
+                    if (item.Key.Equals("@odata.etag", StringComparison.OrdinalIgnoreCase))
                     {
                         headers.Add("If-Match", item.Value.ToString());
                     }
-                    else if (_destinationPrimaryKeyColumns.TryGetValue(item.Name, out Type columnKeyType))
+                    else if (_destinationPrimaryKeyColumns.TryGetValue(item.Key, out Type columnKeyType))
                     {
                         if (columnKeyType == typeof(string))
                         {
-                            primaryKeyColumnValuesForPatch.Add($"{item.Name}='{item.Value}'");
+                            primaryKeyColumnValuesForPatch.Add($"{item.Key}='{item.Value}'");
                         }
                         else
                         {
-                            primaryKeyColumnValuesForPatch.Add($"{item.Name}={item.Value}");
+                            primaryKeyColumnValuesForPatch.Add($"{item.Key}={item.Value}");
                         }
                     }
                 }
