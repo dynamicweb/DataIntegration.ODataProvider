@@ -10,6 +10,7 @@ using Dynamicweb.Extensibility.AddIns;
 using Dynamicweb.Extensibility.Editors;
 using Dynamicweb.Security.Licensing;
 using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -178,25 +179,36 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         }
 
         /// <inheritdoc />
-        public IEnumerable<ParameterOption> GetParameterOptions(string parameterName)
+        IEnumerable<ParameterOption> IParameterOptions.GetParameterOptions(string parameterName)
         {
-            var options = new List<ParameterOption>();
-            if (parameterName == "Mode")
+            switch (parameterName ?? "")
             {
-                options.Add(new ParameterOption("Delta replication|This mode filters records on date and time, whenever possible, and it only acts on new or updated records. It never deletes.", "Delta Replication"));
-                options.Add(new ParameterOption("First page|If maximum page size is 100 then this setting only handles the 100 records of the first page.", "First page"));
+                case "Mode":
+                    {
+                        return new List<ParameterOption>()
+                        {
+                            { new("Delta replication|This mode filters records on date and time, whenever possible, and it only acts on new or updated records. It never deletes.","Delta Replication") },
+                            { new("First page|If maximum page size is 100 then this setting only handles the 100 records of the first page.", "First page") }
+                        };
+                    }
+
+                case "Destination endpoint":
+                case "Predefined endpoint":
+                    {
+                        var result = new List<ParameterOption>();
+                        foreach (var endpoint in _endpointService.GetEndpoints())
+                        {
+                            var value = new GroupedDropDownParameterEditor.DropDownItem(endpoint.Name, endpoint.Collection != null ? endpoint.Collection.Name : "Dynamicweb 9 Endpoints", endpoint.Id.ToString());
+                            result.Add(new(endpoint.Name, value) { Group = endpoint.Collection != null ? endpoint.Collection.Name : "Dynamicweb 9 Endpoints" });
+                        }
+                        return result;
+                    }
+
+                default:
+                    {
+                        return null;
+                    }
             }
-            if (parameterName == "Predefined endpoint" || parameterName == "Destination endpoint")
-            {
-                var endpoints = _endpointService.GetEndpoints();
-                foreach (var endpoint in endpoints)
-                {
-                    var value = new GroupedDropDownParameterEditor.DropDownItem(endpoint.Name, endpoint.Collection != null ? endpoint.Collection.Name : "Dynamicweb 9 Endpoints", endpoint.Id.ToString());
-                    var option = new ParameterOption(endpoint.Name, value) { Group = endpoint.Collection != null ? endpoint.Collection.Name : "Dynamicweb 9 Endpoints" };
-                    options.Add(option);
-                }
-            }
-            return options;
         }
 
         /// <inheritdoc />
@@ -873,6 +885,6 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 stringsToJoin.AddRange(_endpoint.Authentication.Parameters.Select(obj => obj.Key));
             string result = string.Join("_", stringsToJoin);
             return StringHelper.Md5HashToString(result);
-        }       
+        }
     }
 }
