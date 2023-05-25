@@ -131,7 +131,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 
                 IDictionary<string, string> parameters = new Dictionary<string, string>();
 
-                if (_mode == "First page")
+                if (_mode.Equals("First page", StringComparison.OrdinalIgnoreCase) && _maximumPageSize > 0)
                 {
                     parameters.Add("$top", _maximumPageSize.ToString());
                 }
@@ -175,7 +175,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             IDictionary<string, string> result = new Dictionary<string, string>();
             if (_maximumPageSize > 0)
             {
-                result.Add("prefer", "maxpagesize=" + _maximumPageSize);
+                result.Add("prefer", "odata.maxpagesize=" + _maximumPageSize);
             }
             if (_endpoint.Headers != null)
             {
@@ -195,6 +195,10 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             string result = baseURL;
             if (ODataProvider.EndpointIsLoadAllEntities(baseURL))
             {
+                if (!baseURL.EndsWith("/") && !baseURL.EndsWith("metadata", StringComparison.OrdinalIgnoreCase))
+                {
+                    baseURL += "/";
+                }
                 result = new Uri(new Uri(baseURL), tableName).AbsoluteUri;
             }
             if (!string.IsNullOrEmpty(patchURL))
@@ -232,7 +236,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         private string GetModeAsParameters()
         {
             string result = "";
-            if (_mode == "Delta Replication")
+            if (_mode.Equals("Delta Replication", StringComparison.OrdinalIgnoreCase))
             {
                 DateTime? lastRunDateTime = _mapping.Job.LastSuccessfulRun;
                 if (lastRunDateTime != null)
@@ -507,7 +511,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 {
                     return false;
                 }
-                if (string.IsNullOrWhiteSpace(_paginationUrl))
+                if (string.IsNullOrWhiteSpace(_paginationUrl) || _mode.Equals("First page", StringComparison.OrdinalIgnoreCase))
                 {
                     FinishJob();
                     return true;
