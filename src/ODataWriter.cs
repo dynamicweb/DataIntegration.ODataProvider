@@ -64,16 +64,29 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 url = ODataSourceReader.GetEndpointURL(endpointURL, Mapping.DestinationTable.Name, "", parameters);
             }
 
-            var response = GetFromEndpoint<JsonObject>(url, null);
+            var responseFromERP = GetFromEndpoint<JsonObject>(url, null);
+
+            if (!string.IsNullOrEmpty(responseFromERP?.Result?.Error))
+            {
+                if (responseFromERP.Result.Status == HttpStatusCode.Unauthorized)
+                {
+                    throw new Exception(responseFromERP.Result.Error);
+                }
+                Logger.Warn($"Error Url: {url}. Response Error: {responseFromERP.Result.Error}. Status response code: {responseFromERP.Result.Status}");
+                return;
+            }
+
+            var response = responseFromERP?.Result?.Content?.Value;
+
             url = ODataSourceReader.GetEndpointURL(endpointURL, Mapping.DestinationTable.Name, "");
             Task<RestResponse<string>> awaitResponseFromERP;
             if (response != null && response.Count > 0)
             {
                 if (response.Count > 1)
                 {
-                    Logger?.Error($"The filter returned too many records, please update or change filter.");
-                    return;
+                    throw new Exception("The filter returned too many records, please update or change filter.");
                 }
+
                 var jObject = response[0];
                 Logger?.Info($"Recieved response from ERP = {jObject.ToJsonString()}");
                 Dictionary<string, string> headers = new Dictionary<string, string>() { { "Content-Type", "application/json; charset=utf-8" } };
@@ -111,7 +124,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             awaitResponseFromERP.Wait();
             if (!string.IsNullOrEmpty(awaitResponseFromERP.Result.Error))
             {
-                Logger.Warn($"Error Url: {url}. Response Error: {awaitResponseFromERP.Result.Error}");
+                Logger.Warn($"Error Url: {url}. Response Error: {awaitResponseFromERP.Result.Error}. Status response code: {awaitResponseFromERP.Result.Status}");
             }
         }
 
@@ -119,49 +132,49 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         {
             var _client = new HttpRestClient(Credentials, RequestTimeout, Logger);
             var endpointAuthentication = Endpoint.Authentication;
-            Task<RestResponse<T>> awaitResponseFromBC;
+            Task<RestResponse<T>> awaitResponseFromERP;
             if (endpointAuthentication.IsTokenBased())
             {
                 string token = OAuthHelper.GetToken(Endpoint, endpointAuthentication);
                 if (!patch)
                 {
-                    awaitResponseFromBC = _client.PostAsync<string, T>(URL, jsonObject, token, header);
+                    awaitResponseFromERP = _client.PostAsync<string, T>(URL, jsonObject, token, header);
                 }
                 else
                 {
-                    awaitResponseFromBC = _client.PatchAsync<string, T>(URL, jsonObject, token, header);
+                    awaitResponseFromERP = _client.PatchAsync<string, T>(URL, jsonObject, token, header);
                 }
             }
             else
             {
                 if (!patch)
                 {
-                    awaitResponseFromBC = _client.PostAsync<string, T>(URL, jsonObject, endpointAuthentication, header);
+                    awaitResponseFromERP = _client.PostAsync<string, T>(URL, jsonObject, endpointAuthentication, header);
                 }
                 else
                 {
-                    awaitResponseFromBC = _client.PatchAsync<string, T>(URL, jsonObject, endpointAuthentication, header);
+                    awaitResponseFromERP = _client.PatchAsync<string, T>(URL, jsonObject, endpointAuthentication, header);
                 }
             }
-            return awaitResponseFromBC;
+            return awaitResponseFromERP;
         }
 
-        internal List<T> GetFromEndpoint<T>(string URL, Dictionary<string, string> header)
+        internal Task<RestResponse<ResponseFromERP<T>>> GetFromEndpoint<T>(string URL, Dictionary<string, string> header)
         {
             var _client = new HttpRestClient(Credentials, RequestTimeout, Logger);
             var endpointAuthentication = Endpoint.Authentication;
-            Task<RestResponse<ResponseFromERP<T>>> awaitResponseFromBC;
+            Task<RestResponse<ResponseFromERP<T>>> awaitResponseFromERP;
             if (endpointAuthentication.IsTokenBased())
             {
                 string token = OAuthHelper.GetToken(Endpoint, endpointAuthentication);
-                awaitResponseFromBC = _client.GetAsync<ResponseFromERP<T>>(URL, token, header);
+                awaitResponseFromERP = _client.GetAsync<ResponseFromERP<T>>(URL, token, header);
             }
             else
             {
-                awaitResponseFromBC = _client.GetAsync<ResponseFromERP<T>>(URL, endpointAuthentication, header);
+                awaitResponseFromERP = _client.GetAsync<ResponseFromERP<T>>(URL, endpointAuthentication, header);
             }
-            awaitResponseFromBC.Wait();
-            return awaitResponseFromBC.Result.Content.Value;
+            awaitResponseFromERP.Wait();
+            return awaitResponseFromERP;
         }
 
         public static string HandleScriptTypeForColumnMapping(ColumnMapping columnMapping, object columnValue)
