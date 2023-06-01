@@ -131,7 +131,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 
                 IDictionary<string, string> parameters = new Dictionary<string, string>();
 
-                if (_mode.Equals("First page", StringComparison.OrdinalIgnoreCase) && _maximumPageSize > 0)
+                if (_mode != null && _mode.Equals("First page", StringComparison.OrdinalIgnoreCase) && _maximumPageSize > 0)
                 {
                     parameters.Add("$top", _maximumPageSize.ToString());
                 }
@@ -236,7 +236,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         private string GetModeAsParameters()
         {
             string result = "";
-            if (_mode.Equals("Delta Replication", StringComparison.OrdinalIgnoreCase))
+            if (_mode != null && _mode.Equals("Delta Replication", StringComparison.OrdinalIgnoreCase))
             {
                 DateTime? lastRunDateTime = _mapping.Job.LastSuccessfulRun;
                 if (lastRunDateTime != null)
@@ -511,7 +511,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 {
                     return false;
                 }
-                if (string.IsNullOrWhiteSpace(_paginationUrl) || _mode.Equals("First page", StringComparison.OrdinalIgnoreCase))
+                if (string.IsNullOrWhiteSpace(_paginationUrl) || (_mode != null &&  _mode.Equals("First page", StringComparison.OrdinalIgnoreCase)))
                 {
                     FinishJob();
                     return true;
