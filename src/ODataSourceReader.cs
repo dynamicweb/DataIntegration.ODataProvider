@@ -318,6 +318,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 {
                     string condition = item.Condition;
                     string operatorInOData = "";
+                    bool isAlreadyAddedToResult = false;
                     switch (item.ConditionalOperator)
                     {
                         case ConditionalOperator.EqualTo:
@@ -334,13 +335,15 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                             break;
                         case ConditionalOperator.Contains:
                             result.Add($"contains({item.SourceColumn.Name},'{item.Condition}')");
+                            isAlreadyAddedToResult = true;
                             break;
                         case ConditionalOperator.NotContains:
                             result.Add($"contains({item.SourceColumn.Name},'{item.Condition}') ne true");
+                            isAlreadyAddedToResult = true;
                             break;
                         case ConditionalOperator.In:
                             operatorInOData = "eq";
-                            List<string> equalConditions = item.Condition.Split(',').ToList();
+                            List<string> equalConditions = item.Condition.Split(',').Select(val => val.Trim()).ToList();
                             if (item.SourceColumn.Type == typeof(string))
                             {
                                 condition = $"{string.Join($"' or {item.SourceColumn.Name} eq '", equalConditions)}";
@@ -352,7 +355,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                             break;
                         case ConditionalOperator.NotIn:
                             operatorInOData = "ne";
-                            List<string> notEqualConditions = item.Condition.Split(',').ToList();
+                            List<string> notEqualConditions = item.Condition.Split(',').Select(val => val.Trim()).ToList();
                             if (item.SourceColumn.Type == typeof(string))
                             {
                                 condition = $"{string.Join($"' and {item.SourceColumn.Name} ne '", notEqualConditions)}";
@@ -364,25 +367,32 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                             break;
                         case ConditionalOperator.StartsWith:
                             result.Add($"startswith({item.SourceColumn.Name},'{item.Condition}')");
+                            isAlreadyAddedToResult = true;
                             break;
                         case ConditionalOperator.NotStartsWith:
                             result.Add($"startswith({item.SourceColumn.Name},'{item.Condition}') ne true");
+                            isAlreadyAddedToResult = true;
                             break;
                         case ConditionalOperator.EndsWith:
                             result.Add($"endswith({item.SourceColumn.Name},'{item.Condition}')");
+                            isAlreadyAddedToResult = true;
                             break;
                         case ConditionalOperator.NotEndsWith:
                             result.Add($"endswith({item.SourceColumn.Name},'{item.Condition}') ne true");
+                            isAlreadyAddedToResult = true;
                             break;
 
                     }
-                    if (item.SourceColumn.Type == typeof(string))
+                    if (!isAlreadyAddedToResult)
                     {
-                        result.Add($"({item.SourceColumn.Name} {operatorInOData} '{condition}')");
-                    }
-                    else
-                    {
-                        result.Add($"({item.SourceColumn.Name} {operatorInOData} {condition})");
+                        if (item.SourceColumn.Type == typeof(string))
+                        {
+                            result.Add($"({item.SourceColumn.Name} {operatorInOData} '{condition}')");
+                        }
+                        else
+                        {
+                            result.Add($"({item.SourceColumn.Name} {operatorInOData} {condition})");
+                        }
                     }
                 }
             }
@@ -511,7 +521,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 {
                     return false;
                 }
-                if (string.IsNullOrWhiteSpace(_paginationUrl) || (_mode != null &&  _mode.Equals("First page", StringComparison.OrdinalIgnoreCase)))
+                if (string.IsNullOrWhiteSpace(_paginationUrl) || (_mode != null && _mode.Equals("First page", StringComparison.OrdinalIgnoreCase)))
                 {
                     FinishJob();
                     return true;
