@@ -35,11 +35,6 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 
         public void Write(Dictionary<string, object> Row)
         {
-            if (!Mapping.Conditionals.CheckConditionals(Row))
-            {
-                return;
-            }
-
             string endpointURL = Endpoint.Url;
             string url = ODataSourceReader.GetEndpointURL(endpointURL, Mapping.DestinationTable.Name, "");
 
@@ -177,27 +172,6 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             return awaitResponseFromERP;
         }
 
-        public static string HandleScriptTypeForColumnMapping(ColumnMapping columnMapping, object columnValue)
-        {
-            string result = Converter.ToString(columnValue);
-            switch (columnMapping.ScriptType)
-            {
-                case ScriptType.Append:
-                    result = columnMapping.ConvertInputToOutputFormat(columnValue).ToString() + columnMapping.ScriptValue;
-                    break;
-                case ScriptType.Prepend:
-                    result = columnMapping.ScriptValue + columnMapping.ConvertInputToOutputFormat(columnValue).ToString();
-                    break;
-                case ScriptType.Constant:
-                    result = columnMapping.ScriptValue;
-                    break;
-                case ScriptType.NewGuid:
-                    result = columnMapping.GetScriptValue();
-                    break;
-            }
-            return result;
-        }
-
         internal List<string> GetKeyColumnValuesForFilter(Dictionary<string, object> row, ColumnMappingCollection columnMappings)
         {
             var keyColumnValues = new List<string>();
@@ -205,11 +179,11 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             {
                 if (keyMapping.DestinationColumn.Type == typeof(string))
                 {
-                    keyColumnValues.Add($"{keyMapping.DestinationColumn.Name} eq '{HandleScriptTypeForColumnMapping(keyMapping, row[keyMapping.SourceColumn.Name])}'");
+                    keyColumnValues.Add($"{keyMapping.DestinationColumn.Name} eq '{keyMapping.ConvertInputValueToOutputValue(row[keyMapping.SourceColumn?.Name] ?? null)}'");
                 }
                 else
                 {
-                    keyColumnValues.Add($"{keyMapping.DestinationColumn.Name} eq {HandleScriptTypeForColumnMapping(keyMapping, row[keyMapping.SourceColumn.Name])}");
+                    keyColumnValues.Add($"{keyMapping.DestinationColumn.Name} eq {keyMapping.ConvertInputValueToOutputValue(row[keyMapping.SourceColumn?.Name] ?? null)}");
                 }
             }
             return keyColumnValues;
@@ -228,7 +202,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 {
                     if (columnMapping.HasScriptWithValue || row.ContainsKey(columnMapping.SourceColumn.Name))
                     {
-                        var columnValue = HandleScriptTypeForColumnMapping(columnMapping, row[columnMapping.SourceColumn.Name]);
+                        var columnValue = columnMapping.ConvertInputValueToOutputValue(row[columnMapping.SourceColumn?.Name] ?? null);
 
                         switch (columnMapping.DestinationColumn.Type.Name.ToLower())
                         {
