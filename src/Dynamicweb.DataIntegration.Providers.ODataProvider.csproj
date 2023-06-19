@@ -1,7 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
-		<VersionPrefix>10.0.0</VersionPrefix>
-		<VersionSuffix>Alpha0001</VersionSuffix>
+		<Version>10.0.0</Version>
 		<AssemblyVersion>1.0.0.0</AssemblyVersion>
 		<Title>OData Provider</Title>
 		<Description>The Odata Provider lets you fetch and map data from or to any OData endpoint.</Description>
@@ -25,8 +24,8 @@
 		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
 	</PropertyGroup>
 	<ItemGroup>
-		<PackageReference Include="Dynamicweb.Core" Version="10.0.0-*" />
-		<PackageReference Include="Dynamicweb.DataIntegration" Version="10.0.0-*" />
+		<PackageReference Include="Dynamicweb.Core" Version="10.0.0" />
+		<PackageReference Include="Dynamicweb.DataIntegration" Version="10.0.0" />
 		<PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.1.1" PrivateAssets="All" />
 	</ItemGroup>
   <ItemGroup>
