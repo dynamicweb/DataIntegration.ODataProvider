@@ -433,13 +433,14 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             {
                 return "Predefined endpoint can not be empty. Please select any predefined endpoint.";
             }
-            else if (_endpoint?.Authentication == null)
+            if (_endpoint?.Authentication == null)
             {
                 return "Credentials not set for endpoint, please add credentials before continue.";
             }
-            else if (new HttpResponseMessage(GetEndpointResponse(_endpoint.Url)).IsSuccessStatusCode)
+            var endpointStatusCode = GetEndpointResponse(_endpoint.Url, out string _endpointResponse);
+            if (!new HttpResponseMessage(endpointStatusCode).IsSuccessStatusCode)
             {
-                return "Endpoint url is not reachable.";
+                return $"Endpoint returned statuscode: {endpointStatusCode} with response: {_endpointResponse}";
             }
             if (!CheckLicense())
             {
@@ -454,13 +455,14 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             {
                 return "Destination endpoint can not be empty. Please select any destination endpoint";
             }
-            else if (_endpoint?.Authentication == null)
+            if (_endpoint?.Authentication == null)
             {
                 return "Credentials not set for endpoint, please add credentials before continue.";
             }
-            else if (new HttpResponseMessage(GetEndpointResponse(_endpoint.Url)).IsSuccessStatusCode)
+            var endpointStatusCode = GetEndpointResponse(_endpoint.Url, out string _endpointResponse);
+            if (!new HttpResponseMessage(endpointStatusCode).IsSuccessStatusCode)
             {
-                return "Endpoint url is not reachable.";
+                return $"Endpoint returned statuscode: {endpointStatusCode} with response: {_endpointResponse}";
             }
             if (!CheckLicense())
             {
@@ -709,7 +711,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         private bool IsFOEnpoint(string url)
         {
             bool result = false;
-            HttpStatusCode response = GetEndpointResponse($"{new Uri(url).GetLeftPart(UriPartial.Authority)}/data.svc");
+            HttpStatusCode response = GetEndpointResponse($"{new Uri(url).GetLeftPart(UriPartial.Authority)}/data.svc", out string _endpointResponse);
             if (new HttpResponseMessage(response).IsSuccessStatusCode && !string.IsNullOrEmpty(_endpointResponse))
             {
                 if (_endpointResponse.Contains("Microsoft Dynamics 365 Finance and Operations", StringComparison.OrdinalIgnoreCase))
@@ -723,7 +725,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         private bool IsCRMEndpoint(string url)
         {
             bool result = false;
-            HttpStatusCode response = GetEndpointResponse(url);
+            HttpStatusCode response = GetEndpointResponse(url, out string _endpointResponse);
             if (new HttpResponseMessage(response).IsSuccessStatusCode && !string.IsNullOrEmpty(_endpointResponse))
             {
                 if (_endpointResponse.Contains("<title>Microsoft Dynamics 365</title>", StringComparison.OrdinalIgnoreCase))
@@ -737,7 +739,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         private bool IsBCEndpoint()
         {
             bool result = false;
-            HttpStatusCode response = GetEndpointResponse(GetMetadataURL());
+            HttpStatusCode response = GetEndpointResponse(GetMetadataURL(), out string _endpointResponse);
             if (new HttpResponseMessage(response).IsSuccessStatusCode && !string.IsNullOrEmpty(_endpointResponse))
             {
                 if (_endpointResponse.Contains("<Schema Namespace=\"Microsoft.NAV\"", StringComparison.OrdinalIgnoreCase)
@@ -749,10 +751,9 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             return result;
         }
 
-        private string _endpointResponse { get; set; }
-
-        private HttpStatusCode GetEndpointResponse(string url)
+        private HttpStatusCode GetEndpointResponse(string url, out string endpointResponse)
         {
+            string _endpointResponse = "";
             try
             {
                 HttpStatusCode result = HttpStatusCode.NotFound;
@@ -776,12 +777,14 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                         result = responseStatusCode;
                     }
                 }
+                endpointResponse = _endpointResponse;
                 return result;
             }
             catch (Exception ex)
             {
                 Logger?.Error($"Error GetEndpointResponse url: {url}", ex);
             }
+            endpointResponse = _endpointResponse;
             return HttpStatusCode.NotFound;
         }
     }
