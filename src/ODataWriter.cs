@@ -200,9 +200,10 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 
                 if (columnMapping.SourceColumn != null)
                 {
-                    if (columnMapping.HasScriptWithValue || row.ContainsKey(columnMapping.SourceColumn.Name))
+                    object rowValue = null;
+                    if (columnMapping.HasScriptWithValue || row.TryGetValue(columnMapping.SourceColumn?.Name, out rowValue))
                     {
-                        var columnValue = columnMapping.ConvertInputValueToOutputValue(row[columnMapping.SourceColumn?.Name] ?? null);
+                        var columnValue = columnMapping.ConvertInputValueToOutputValue(rowValue);
 
                         switch (columnMapping.DestinationColumn.Type.Name.ToLower())
                         {
