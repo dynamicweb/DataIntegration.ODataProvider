@@ -13,6 +13,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Net.Http;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Xml;
@@ -39,7 +40,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         private const string GenericOData = "eCom_DataIntegrationODataGeneric";
         private const string CRMTrilingVersionPattern = "\\/v[0-9]*.[0-9]*";
         private const string CRMCloudRegexPattern = "https:\\/\\/[0-9a-z]+.crm[0-9]*.dynamics.com\\/[0-9a-z]*";
-        private const string FOCloudRegexPattern = "https://.+.(((ax)?cloud(ax)?)|(operations)).dynamics.com/(data[0-9a-z])*";        
+        private const string FOCloudRegexPattern = "https://.+.(((ax)?cloud(ax)?)|(operations)).dynamics.com/(data[0-9a-z])*";
         internal IHttpRestClient Client => new HttpRestClient(_credentials, 20);
 
         #region AddInManager/ConfigurableAddIn Source
@@ -51,7 +52,8 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         public string EndpointId
         {
             get => _endpoint?.Id.ToString();
-            set {
+            set
+            {
                 _endpoint = _endpointService.GetEndpointById(Convert.ToInt32(value));
                 SetCredentials();
             }
@@ -431,9 +433,14 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             {
                 return "Predefined endpoint can not be empty. Please select any predefined endpoint.";
             }
-            else if (_endpoint?.Authentication == null)
+            if (_endpoint?.Authentication == null)
             {
                 return "Credentials not set for endpoint, please add credentials before continue.";
+            }
+            var endpointStatusCode = GetEndpointResponse(_endpoint.Url, out string _endpointResponse);
+            if (!new HttpResponseMessage(endpointStatusCode).IsSuccessStatusCode)
+            {
+                return $"Endpoint returned statuscode: {endpointStatusCode} with response: {_endpointResponse}";
             }
             if (!CheckLicense())
             {
@@ -448,9 +455,14 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             {
                 return "Destination endpoint can not be empty. Please select any destination endpoint";
             }
-            else if (_endpoint?.Authentication == null)
+            if (_endpoint?.Authentication == null)
             {
                 return "Credentials not set for endpoint, please add credentials before continue.";
+            }
+            var endpointStatusCode = GetEndpointResponse(_endpoint.Url, out string _endpointResponse);
+            if (!new HttpResponseMessage(endpointStatusCode).IsSuccessStatusCode)
+            {
+                return $"Endpoint returned statuscode: {endpointStatusCode} with response: {_endpointResponse}";
             }
             if (!CheckLicense())
             {
@@ -659,7 +671,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         }
 
         private ErpType GetErpType()
-        {            
+        {
             string url = _endpoint?.Url;
             if (!string.IsNullOrEmpty(url))
             {
@@ -699,10 +711,10 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         private bool IsFOEnpoint(string url)
         {
             bool result = false;
-            string response = GetEndpointResponse($"{new Uri(url).GetLeftPart(UriPartial.Authority)}/data.svc");
-            if (!string.IsNullOrWhiteSpace(response))
+            HttpStatusCode response = GetEndpointResponse($"{new Uri(url).GetLeftPart(UriPartial.Authority)}/data.svc", out string _endpointResponse);
+            if (new HttpResponseMessage(response).IsSuccessStatusCode && !string.IsNullOrEmpty(_endpointResponse))
             {
-                if (response.Contains("Microsoft Dynamics 365 Finance and Operations", StringComparison.OrdinalIgnoreCase))
+                if (_endpointResponse.Contains("Microsoft Dynamics 365 Finance and Operations", StringComparison.OrdinalIgnoreCase))
                 {
                     result = true;
                 }
@@ -713,10 +725,10 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         private bool IsCRMEndpoint(string url)
         {
             bool result = false;
-            string response = GetEndpointResponse(url);
-            if (!string.IsNullOrWhiteSpace(response))
+            HttpStatusCode response = GetEndpointResponse(url, out string _endpointResponse);
+            if (new HttpResponseMessage(response).IsSuccessStatusCode && !string.IsNullOrEmpty(_endpointResponse))
             {
-                if (response.Contains("<title>Microsoft Dynamics 365</title>", StringComparison.OrdinalIgnoreCase))
+                if (_endpointResponse.Contains("<title>Microsoft Dynamics 365</title>", StringComparison.OrdinalIgnoreCase))
                 {
                     result = true;
                 }
@@ -727,11 +739,11 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         private bool IsBCEndpoint()
         {
             bool result = false;
-            string response = GetEndpointResponse(GetMetadataURL());
-            if (!string.IsNullOrWhiteSpace(response))
+            HttpStatusCode response = GetEndpointResponse(GetMetadataURL(), out string _endpointResponse);
+            if (new HttpResponseMessage(response).IsSuccessStatusCode && !string.IsNullOrEmpty(_endpointResponse))
             {
-                if (response.Contains("<Schema Namespace=\"Microsoft.NAV\"", StringComparison.OrdinalIgnoreCase)
-                    || response.Contains("<Schema Namespace=\"NAV\"", StringComparison.OrdinalIgnoreCase))
+                if (_endpointResponse.Contains("<Schema Namespace=\"Microsoft.NAV\"", StringComparison.OrdinalIgnoreCase)
+                    || _endpointResponse.Contains("<Schema Namespace=\"NAV\"", StringComparison.OrdinalIgnoreCase))
                 {
                     result = true;
                 }
@@ -739,11 +751,12 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             return result;
         }
 
-        private string GetEndpointResponse(string url)
+        private HttpStatusCode GetEndpointResponse(string url, out string endpointResponse)
         {
+            string _endpointResponse = "";
             try
-            {                
-                string result = "";
+            {
+                HttpStatusCode result = HttpStatusCode.NotFound;
                 Task task;
                 var endpointAuthentication = _endpoint.Authentication;
                 if (endpointAuthentication.IsTokenBased())
@@ -760,16 +773,19 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 {
                     using (var stream = new StreamReader(responseStream))
                     {
-                        result = stream.ReadToEnd();
+                        _endpointResponse = stream.ReadToEnd();
+                        result = responseStatusCode;
                     }
                 }
+                endpointResponse = _endpointResponse;
                 return result;
             }
             catch (Exception ex)
             {
                 Logger?.Error($"Error GetEndpointResponse url: {url}", ex);
             }
-            return null;
+            endpointResponse = _endpointResponse;
+            return HttpStatusCode.NotFound;
         }
     }
 }
