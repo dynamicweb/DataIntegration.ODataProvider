@@ -3,7 +3,7 @@ using System.Text.Json.Serialization;
 
 namespace Dynamicweb.DataIntegration.Providers.ODataProvider.Model
 {
-    internal class ResponseFromERP<T>
+    internal class ResponseFromEndpoint<T>
     {
         [JsonPropertyName("@odata.context")]
         public string Odata { get; set; }

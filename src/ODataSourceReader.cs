@@ -7,6 +7,7 @@ using Dynamicweb.DataIntegration.Providers.ODataProvider.Model;
 using Dynamicweb.Logging;
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Globalization;
 using System.IO;
 using System.Linq;
@@ -302,7 +303,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 }
                 else
                 {
-                    _logger?.Info("Detected many active column mappings, so will not auto add $select with all active column mappings and by that limit the data recieved from ERP.");
+                    _logger?.Info("Detected many active column mappings, so will not auto add $select with all active column mappings and by that limit the data recieved from Endpoint.");
                 }
             }
             return result;
@@ -482,7 +483,11 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 var endpointAuthentication = _endpoint.Authentication;
                 if (endpointAuthentication.IsTokenBased())
                 {
-                    string token = OAuthHelper.GetToken(_endpoint, endpointAuthentication);
+                    string token = OAuthHelper.GetToken(_endpoint, endpointAuthentication, out Exception exception);
+                    if (exception != null)
+                    {
+                        throw exception;
+                    }
                     task = RetryHelper.RetryOnExceptionAsync<Exception>(10, async () => { _httpRestClient.GetAsync(url, HandleStream, token, (Dictionary<string, string>)headers).Wait(new CancellationTokenSource(timeoutInMilliseconds).Token); }, _logger);
                 }
                 else
@@ -577,7 +582,11 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             var endpointAuthentication = _endpoint.Authentication;
             if (endpointAuthentication.IsTokenBased())
             {
-                string token = OAuthHelper.GetToken(_endpoint, endpointAuthentication);
+                string token = OAuthHelper.GetToken(_endpoint, endpointAuthentication, out Exception exception);
+                if (exception != null) 
+                {
+                    throw exception;
+                }
                 task = _httpRestClient.GetAsync(checkUrl, HandleResponse, token);
             }
             else

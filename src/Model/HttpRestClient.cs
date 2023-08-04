@@ -1,6 +1,8 @@
-﻿using Dynamicweb.DataIntegration.EndpointManagement;
+﻿using Dynamicweb.Configuration;
+using Dynamicweb.DataIntegration.EndpointManagement;
 using Dynamicweb.DataIntegration.Providers.ODataProvider.Interfaces;
 using Dynamicweb.Logging;
+using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -61,6 +63,14 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider.Model
                 Credentials = credentials ?? throw new ArgumentNullException(nameof(credentials)),
                 PreAuthenticate = true
             };
+			if (SystemConfiguration.Instance.GetBoolean("/Globalsettings/Modules/EndpointManagement/SkipCertificateValidation"))
+            {
+                clientHandler.ServerCertificateCustomValidationCallback =
+                    (httpRequestMessage, cert, cetChain, policyErrors) =>
+                    {
+                        return true;
+                    };
+            }
             _client = new HttpClient(clientHandler);
             _client.Timeout = TimeSpan.FromMinutes(timeout);
         }
@@ -77,6 +87,14 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider.Model
                 Credentials = credentials ?? throw new ArgumentNullException(nameof(credentials)),
                 PreAuthenticate = true
             };
+            if (SystemConfiguration.Instance.GetBoolean("/Globalsettings/Modules/EndpointManagement/SkipCertificateValidation"))
+            {
+                clientHandler.ServerCertificateCustomValidationCallback =
+                    (httpRequestMessage, cert, cetChain, policyErrors) =>
+                    {
+                        return true;
+                    };
+            }
             _client = new HttpClient(clientHandler);
             _client.Timeout = TimeSpan.FromMinutes(timeout);
         }
@@ -325,7 +343,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider.Model
                             Headers = responseHeaders,
                         };
                         var listOfHeaders = responseHeaders.Select(obj => $"{obj.Key}:{obj.Value}").ToList();
-                        _logger?.Error($"ERP error: {responseContent} Status: {response.StatusCode} Headers: {string.Join(",", listOfHeaders)}");
+                        _logger?.Error($"Endpoint error: {responseContent} Status: {response.StatusCode} Headers: {string.Join(",", listOfHeaders)}");
                         return responseResult;
                     }
                     else
@@ -354,9 +372,13 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider.Model
                         }
                         else
                         {
-                            //Converting above JContainer to instance of requested type, and returns object to caller.
-                            responseResult.Content = JsonSerializer.Deserialize<TResponse>(responseContent);
-                        }
+							bool isEmptyPatchRequestResponse = response.StatusCode == HttpStatusCode.NoContent && string.IsNullOrEmpty(responseContent);
+							if (!isEmptyPatchRequestResponse)                            
+                            {
+								//Converting above JContainer to instance of requested type, and returns object to caller.
+								responseResult.Content = JsonSerializer.Deserialize<TResponse>(responseContent);
+							}
+						}
 
                         // Finally, we can return result to caller.
                         return responseResult;

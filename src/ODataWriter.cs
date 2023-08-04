@@ -6,6 +6,7 @@ using Dynamicweb.DataIntegration.Providers.ODataProvider.Model;
 using Dynamicweb.Logging;
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Text.Json.Nodes;
@@ -40,8 +41,8 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 
             var columnMappings = Mapping.GetColumnMappings();
             var keyColumnValuesForFilter = GetKeyColumnValuesForFilter(Row, columnMappings);
-            string request = MapValuesToJSon(columnMappings, Row);
 
+            Task<RestResponse<string>> awaitResponseFromEndpoint;
             if (keyColumnValuesForFilter.Any())
             {
                 string filter = string.Join(" and ", keyColumnValuesForFilter);
@@ -57,69 +58,79 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                     }
                 }
                 url = ODataSourceReader.GetEndpointURL(endpointURL, Mapping.DestinationTable.Name, "", parameters);
-            }
 
-            var responseFromERP = GetFromEndpoint<JsonObject>(url, null);
-
-            if (!string.IsNullOrEmpty(responseFromERP?.Result?.Error))
-            {
-                if (responseFromERP.Result.Status == HttpStatusCode.Unauthorized)
+                var responseFromEndpoint = GetFromEndpoint<JsonObject>(url, null);
+                if (!string.IsNullOrEmpty(responseFromEndpoint?.Result?.Error))
                 {
-                    throw new Exception(responseFromERP.Result.Error);
-                }
-                Logger.Warn($"Error Url: {url}. Response Error: {responseFromERP.Result.Error}. Status response code: {responseFromERP.Result.Status}");
-                return;
-            }
-
-            var response = responseFromERP?.Result?.Content?.Value;
-
-            url = ODataSourceReader.GetEndpointURL(endpointURL, Mapping.DestinationTable.Name, "");
-            Task<RestResponse<string>> awaitResponseFromERP;
-            if (response != null && response.Count > 0)
-            {
-                if (response.Count > 1)
-                {
-                    throw new Exception("The filter returned too many records, please update or change filter.");
-                }
-
-                var jObject = response[0];
-                Logger?.Info($"Recieved response from ERP = {jObject.ToJsonString()}");
-                Dictionary<string, string> headers = new Dictionary<string, string>() { { "Content-Type", "application/json; charset=utf-8" } };
-
-                List<string> primaryKeyColumnValuesForPatch = new List<string>();
-                foreach (var item in jObject)
-                {
-                    if (item.Key.Equals("@odata.etag", StringComparison.OrdinalIgnoreCase))
+                    if (responseFromEndpoint.Result.Status == HttpStatusCode.Unauthorized)
                     {
-                        headers.Add("If-Match", item.Value.ToString());
+                        throw new Exception(responseFromEndpoint.Result.Error);
                     }
-                    else if (_destinationPrimaryKeyColumns.TryGetValue(item.Key, out Type columnKeyType))
-                    {
-                        if (columnKeyType == typeof(string))
-                        {
-                            primaryKeyColumnValuesForPatch.Add($"{item.Key}='{item.Value}'");
-                        }
-                        else
-                        {
-                            primaryKeyColumnValuesForPatch.Add($"{item.Key}={item.Value}");
-                        }
-                    }
+                    Logger.Warn($"Error Url: {url}. Response Error: {responseFromEndpoint.Result.Error}. Status response code: {responseFromEndpoint.Result.Status}");
+                    return;
                 }
-                if (primaryKeyColumnValuesForPatch.Any())
+
+                var response = responseFromEndpoint?.Result?.Content?.Value;
+
+                url = ODataSourceReader.GetEndpointURL(endpointURL, Mapping.DestinationTable.Name, "");
+                if (response != null && response.Count > 0)
                 {
-                    string patchURL = "(" + string.Join(",", primaryKeyColumnValuesForPatch) + ")";
-                    url = ODataSourceReader.GetEndpointURL(endpointURL, Mapping.DestinationTable.Name, patchURL);
+                    if (response.Count > 1)
+                    {
+                        throw new Exception("The filter returned too many records, please update or change filter.");
+                    }
+
+                    var jObject = response[0];
+                    Logger?.Info($"Recieved response from Endpoint = {jObject.ToJsonString()}");
+
+                    var patchJson = MapValuesToJSon(columnMappings, Row, true);
+                    if (patchJson.Equals(new JsonObject().ToString()))
+                    {
+                        Logger?.Info($"Skipped PATCH as no active column mappings is added for always apply.");
+                        return;
+                    }
+
+                    Dictionary<string, string> headers = new Dictionary<string, string>() { { "Content-Type", "application/json; charset=utf-8" } };
+
+                    List<string> primaryKeyColumnValuesForPatch = new List<string>();
+                    foreach (var item in jObject)
+                    {
+                        if (item.Key.Equals("@odata.etag", StringComparison.OrdinalIgnoreCase))
+                        {
+                            headers.Add("If-Match", item.Value.ToString());
+                        }
+                        else if (_destinationPrimaryKeyColumns.TryGetValue(item.Key, out Type columnKeyType))
+                        {
+                            if (columnKeyType == typeof(string))
+                            {
+                                primaryKeyColumnValuesForPatch.Add($"{item.Key}='{item.Value}'");
+                            }
+                            else
+                            {
+                                primaryKeyColumnValuesForPatch.Add($"{item.Key}={item.Value}");
+                            }
+                        }
+                    }
+                    if (primaryKeyColumnValuesForPatch.Any())
+                    {
+                        string patchURL = "(" + string.Join(",", primaryKeyColumnValuesForPatch) + ")";
+                        url = ODataSourceReader.GetEndpointURL(endpointURL, Mapping.DestinationTable.Name, patchURL);
+                    }
+                    awaitResponseFromEndpoint = PostToEndpoint<string>(url, patchJson, headers, true);
                 }
-                awaitResponseFromERP = PostToEndpoint<string>(url, request, headers, true);
+                else
+                {
+                    awaitResponseFromEndpoint = PostToEndpoint<string>(url, MapValuesToJSon(columnMappings, Row, false), null, false);
+                }
             }
             else
             {
-                awaitResponseFromERP = PostToEndpoint<string>(url, request, null, false);
+                awaitResponseFromEndpoint = PostToEndpoint<string>(url, MapValuesToJSon(columnMappings, Row, false), null, false);
             }
-            awaitResponseFromERP.Wait();
-            if (!string.IsNullOrEmpty(awaitResponseFromERP.Result.Error))
+            awaitResponseFromEndpoint.Wait();
+            if (!string.IsNullOrEmpty(awaitResponseFromEndpoint?.Result?.Error))
             {
-                Logger.Warn($"Error Url: {url}. Response Error: {awaitResponseFromERP.Result.Error}. Status response code: {awaitResponseFromERP.Result.Status}");
+                Logger.Warn($"Error Url: {url}. Response Error: {awaitResponseFromEndpoint.Result.Error}. Status response code: {awaitResponseFromEndpoint.Result.Status}");
             }
         }
 
@@ -127,49 +138,57 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         {
             var _client = new HttpRestClient(Credentials, RequestTimeout, Logger);
             var endpointAuthentication = Endpoint.Authentication;
-            Task<RestResponse<T>> awaitResponseFromERP;
+            Task<RestResponse<T>> awaitResponseFromEndpoint;
             if (endpointAuthentication.IsTokenBased())
             {
-                string token = OAuthHelper.GetToken(Endpoint, endpointAuthentication);
+                string token = OAuthHelper.GetToken(Endpoint, endpointAuthentication, out Exception exception);
+                if (exception != null)
+                {
+                    throw exception;
+                }
                 if (!patch)
                 {
-                    awaitResponseFromERP = _client.PostAsync<string, T>(URL, jsonObject, token, header);
+                    awaitResponseFromEndpoint = _client.PostAsync<string, T>(URL, jsonObject, token, header);
                 }
                 else
                 {
-                    awaitResponseFromERP = _client.PatchAsync<string, T>(URL, jsonObject, token, header);
+                    awaitResponseFromEndpoint = _client.PatchAsync<string, T>(URL, jsonObject, token, header);
                 }
             }
             else
             {
                 if (!patch)
                 {
-                    awaitResponseFromERP = _client.PostAsync<string, T>(URL, jsonObject, endpointAuthentication, header);
+                    awaitResponseFromEndpoint = _client.PostAsync<string, T>(URL, jsonObject, endpointAuthentication, header);
                 }
                 else
                 {
-                    awaitResponseFromERP = _client.PatchAsync<string, T>(URL, jsonObject, endpointAuthentication, header);
+                    awaitResponseFromEndpoint = _client.PatchAsync<string, T>(URL, jsonObject, endpointAuthentication, header);
                 }
             }
-            return awaitResponseFromERP;
+            return awaitResponseFromEndpoint;
         }
 
-        internal Task<RestResponse<ResponseFromERP<T>>> GetFromEndpoint<T>(string URL, Dictionary<string, string> header)
+        internal Task<RestResponse<ResponseFromEndpoint<T>>> GetFromEndpoint<T>(string URL, Dictionary<string, string> header)
         {
             var _client = new HttpRestClient(Credentials, RequestTimeout, Logger);
             var endpointAuthentication = Endpoint.Authentication;
-            Task<RestResponse<ResponseFromERP<T>>> awaitResponseFromERP;
+            Task<RestResponse<ResponseFromEndpoint<T>>> awaitResponseFromEndpoint;
             if (endpointAuthentication.IsTokenBased())
             {
-                string token = OAuthHelper.GetToken(Endpoint, endpointAuthentication);
-                awaitResponseFromERP = _client.GetAsync<ResponseFromERP<T>>(URL, token, header);
+                string token = OAuthHelper.GetToken(Endpoint, endpointAuthentication, out Exception exception);
+                if (exception != null)
+                {
+                    throw exception;
+                }
+                awaitResponseFromEndpoint = _client.GetAsync<ResponseFromEndpoint<T>>(URL, token, header);
             }
             else
             {
-                awaitResponseFromERP = _client.GetAsync<ResponseFromERP<T>>(URL, endpointAuthentication, header);
+                awaitResponseFromEndpoint = _client.GetAsync<ResponseFromEndpoint<T>>(URL, endpointAuthentication, header);
             }
-            awaitResponseFromERP.Wait();
-            return awaitResponseFromERP;
+            awaitResponseFromEndpoint.Wait();
+            return awaitResponseFromEndpoint;
         }
 
         internal List<string> GetKeyColumnValuesForFilter(Dictionary<string, object> row, ColumnMappingCollection columnMappings)
@@ -189,37 +208,46 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             return keyColumnValues;
         }
 
-        internal string MapValuesToJSon(ColumnMappingCollection columnMappings, Dictionary<string, object> row)
+        internal string MapValuesToJSon(ColumnMappingCollection columnMappings, Dictionary<string, object> row, bool isPatchRequest)
         {
             var jsonObject = new JsonObject();
 
             foreach (ColumnMapping columnMapping in columnMappings)
             {
-                if (!columnMapping.Active)
+                if (!columnMapping.Active || (columnMapping.ScriptValueForInsert && isPatchRequest))
                     continue;
 
-                if (columnMapping.SourceColumn != null)
+                object rowValue = null;
+                if (columnMapping.HasScriptWithValue || row.TryGetValue(columnMapping.SourceColumn?.Name, out rowValue))
                 {
-                    object rowValue = null;
-                    if (columnMapping.HasScriptWithValue || row.TryGetValue(columnMapping.SourceColumn?.Name, out rowValue))
-                    {
-                        var columnValue = columnMapping.ConvertInputValueToOutputValue(rowValue);
+                    var columnValue = columnMapping.ConvertInputValueToOutputValue(rowValue);
 
-                        switch (columnMapping.DestinationColumn.Type.Name.ToLower())
-                        {
-                            case "decimal":
-                                jsonObject.Add(columnMapping.DestinationColumn.Name, Converter.ToDecimal(columnValue));
-                                break;
-                            case "int":
-                                jsonObject.Add(columnMapping.DestinationColumn.Name, Converter.ToInt64(columnValue));
-                                break;
-                            case "double":
-                                jsonObject.Add(columnMapping.DestinationColumn.Name, Converter.ToDecimal(columnValue));
-                                break;
-                            default:
-                                jsonObject.Add(columnMapping.DestinationColumn.Name, Converter.ToString(columnValue));
-                                break;
-                        }
+                    switch (columnMapping.DestinationColumn.Type.Name.ToLower())
+                    {
+                        case "decimal":
+                            jsonObject.Add(columnMapping.DestinationColumn.Name, Converter.ToDecimal(columnValue));
+                            break;
+                        case "int":
+                            jsonObject.Add(columnMapping.DestinationColumn.Name, Converter.ToInt64(columnValue));
+                            break;
+                        case "double":
+                            jsonObject.Add(columnMapping.DestinationColumn.Name, Converter.ToDecimal(columnValue));
+                            break;
+                        case "datetime":
+                            var dateTime = Converter.ToDateTime(columnValue);
+                            DateTime dateTimeInUtc = TimeZoneInfo.ConvertTimeToUtc(dateTime);
+                            if (dateTimeInUtc.TimeOfDay.TotalMilliseconds > 0)
+                            {
+                                jsonObject.Add(columnMapping.DestinationColumn.Name, dateTimeInUtc.ToString("yyyy-MM-ddTHH:mm:ss.fff", CultureInfo.InvariantCulture) + "z");
+                            }
+                            else
+                            {
+                                jsonObject.Add(columnMapping.DestinationColumn.Name, dateTimeInUtc.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + "z");
+                            }
+                            break;
+                        default:
+                            jsonObject.Add(columnMapping.DestinationColumn.Name, Converter.ToString(columnValue));
+                            break;
                     }
                 }
             }
