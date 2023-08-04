@@ -437,14 +437,18 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             {
                 return "Credentials not set for endpoint, please add credentials before continue.";
             }
-            var endpointStatusCode = GetEndpointResponse(_endpoint.Url, out string _endpointResponse);
+            var endpointStatusCode = GetEndpointResponse(_endpoint.Url, out string _endpointResponse, out Exception exception);
+            if (exception != null)
+            {
+                return $"{exception.Message}";
+            }
             if (!new HttpResponseMessage(endpointStatusCode).IsSuccessStatusCode)
             {
                 return $"Endpoint returned statuscode: {endpointStatusCode} with response: {_endpointResponse}";
             }
             if (!CheckLicense())
             {
-                return "License error: no Batch Integration module is installed for this ERP.";
+                return "License error: no Batch Integration module is installed for this Endpoint.";
             }
             return null;
         }
@@ -459,14 +463,18 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             {
                 return "Credentials not set for endpoint, please add credentials before continue.";
             }
-            var endpointStatusCode = GetEndpointResponse(_endpoint.Url, out string _endpointResponse);
+            var endpointStatusCode = GetEndpointResponse(_endpoint.Url, out string _endpointResponse, out Exception exception);
+            if (exception != null)
+            {
+                return $"{exception.Message}";
+            }
             if (!new HttpResponseMessage(endpointStatusCode).IsSuccessStatusCode)
             {
                 return $"Endpoint returned statuscode: {endpointStatusCode} with response: {_endpointResponse}";
             }
             if (!CheckLicense())
             {
-                return "License error: no Batch Integration module is installed for this ERP.";
+                return "License error: no Batch Integration module is installed for this Endpoint.";
             }
             return null;
         }
@@ -619,7 +627,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                     continue;
                 }
 
-                if (!mapping.Active && mapping.GetColumnMappings().Count == 0)
+                if (!mapping.Active || mapping.GetColumnMappings().Count == 0)
                 {
                     Logger?.Log($"There are no active mappings between '{mapping.SourceTable.Name}' and '{mapping.DestinationTable.Name}'.");
                     continue;
@@ -711,7 +719,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         private bool IsFOEnpoint(string url)
         {
             bool result = false;
-            HttpStatusCode response = GetEndpointResponse($"{new Uri(url).GetLeftPart(UriPartial.Authority)}/data.svc", out string _endpointResponse);
+            HttpStatusCode response = GetEndpointResponse($"{new Uri(url).GetLeftPart(UriPartial.Authority)}/data.svc", out string _endpointResponse, out _);
             if (new HttpResponseMessage(response).IsSuccessStatusCode && !string.IsNullOrEmpty(_endpointResponse))
             {
                 if (_endpointResponse.Contains("Microsoft Dynamics 365 Finance and Operations", StringComparison.OrdinalIgnoreCase))
@@ -725,7 +733,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         private bool IsCRMEndpoint(string url)
         {
             bool result = false;
-            HttpStatusCode response = GetEndpointResponse(url, out string _endpointResponse);
+            HttpStatusCode response = GetEndpointResponse(url, out string _endpointResponse, out _);
             if (new HttpResponseMessage(response).IsSuccessStatusCode && !string.IsNullOrEmpty(_endpointResponse))
             {
                 if (_endpointResponse.Contains("<title>Microsoft Dynamics 365</title>", StringComparison.OrdinalIgnoreCase))
@@ -739,7 +747,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         private bool IsBCEndpoint()
         {
             bool result = false;
-            HttpStatusCode response = GetEndpointResponse(GetMetadataURL(), out string _endpointResponse);
+            HttpStatusCode response = GetEndpointResponse(GetMetadataURL(), out string _endpointResponse, out _);
             if (new HttpResponseMessage(response).IsSuccessStatusCode && !string.IsNullOrEmpty(_endpointResponse))
             {
                 if (_endpointResponse.Contains("<Schema Namespace=\"Microsoft.NAV\"", StringComparison.OrdinalIgnoreCase)
@@ -751,9 +759,10 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             return result;
         }
 
-        private HttpStatusCode GetEndpointResponse(string url, out string endpointResponse)
+        private HttpStatusCode GetEndpointResponse(string url, out string endpointResponse, out Exception exception)
         {
             string _endpointResponse = "";
+            exception = null;
             try
             {
                 HttpStatusCode result = HttpStatusCode.NotFound;
@@ -761,7 +770,8 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 var endpointAuthentication = _endpoint.Authentication;
                 if (endpointAuthentication.IsTokenBased())
                 {
-                    string token = OAuthHelper.GetToken(_endpoint, endpointAuthentication);
+                    string token = OAuthHelper.GetToken(_endpoint, endpointAuthentication, out Exception error);
+                    exception = error;
                     task = Client.GetAsync(url, HandleResponse, token);
                 }
                 else
