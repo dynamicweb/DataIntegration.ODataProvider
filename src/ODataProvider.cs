@@ -253,7 +253,11 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 }
                 metadataResponse.Wait();
             }
-            return entitySetsTables;
+            if (entitySetsTables == new Schema())
+            {
+                Logger?.Error("Error getting a new source schema.");
+            }
+            return entitySetsTables != new Schema() ? entitySetsTables : _schema ?? new Schema();
 
             void HandleStream(Stream responseStream, HttpStatusCode responseStatusCode, Dictionary<string, string> responseHeaders)
             {
