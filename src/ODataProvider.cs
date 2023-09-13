@@ -136,7 +136,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 
         private string GetEntityName()
         {
-            return new Uri(_endpoint.Url).Segments.LastOrDefault() ?? _endpoint.Name;
+            return new Uri(_endpoint.Url).Segments.LastOrDefault() ?? "";
         }
 
         internal void SetCredentials()
@@ -253,11 +253,13 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 }
                 metadataResponse.Wait();
             }
-            if (entitySetsTables == new Schema())
+
+            var emptySchema = new Schema();
+            if (entitySetsTables == emptySchema)
             {
-                Logger?.Error("Error getting a new source schema.");
+                Logger?.Error("Error getting a new schema.");
             }
-            return entitySetsTables != new Schema() ? entitySetsTables : _schema ?? new Schema();
+            return entitySetsTables != emptySchema ? entitySetsTables : _schema ?? emptySchema;
 
             void HandleStream(Stream responseStream, HttpStatusCode responseStatusCode, Dictionary<string, string> responseHeaders)
             {
@@ -266,51 +268,27 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                     var xmlReader = XmlReader.Create(responseStream);
                     using (xmlReader)
                     {
-                        if (EndpointIsLoadAllEntities(_endpoint.Url))
+                        while (xmlReader.Read())
                         {
-                            while (xmlReader.Read())
+                            if (xmlReader.NodeType == XmlNodeType.Element &&
+                                xmlReader.Name.Equals("EntityType", StringComparison.OrdinalIgnoreCase))
                             {
-                                if (xmlReader.NodeType == XmlNodeType.Element &&
-                                    xmlReader.Name.Equals("EntityType", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    var table = entityTypeTables.AddTable(xmlReader.GetAttribute("Name"));
-                                    AddPropertiesFromXMLReaderToTable(xmlReader, table, entityTypeTables);
-                                }
-                                else if (xmlReader.NodeType == XmlNodeType.Element &&
-                                    xmlReader.Name.Equals("EntitySet", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    GetColumnsFromEntityTypeTableToEntitySetTable(entitySetsTables.AddTable(xmlReader.GetAttribute("Name")), entityTypeTables, xmlReader.GetAttribute("EntityType"));
-                                }
+                                var table = entityTypeTables.AddTable(xmlReader.GetAttribute("Name"));
+                                AddPropertiesFromXMLReaderToTable(xmlReader, table, entityTypeTables);
+                            }
+                            else if (xmlReader.NodeType == XmlNodeType.Element &&
+                                xmlReader.Name.Equals("EntitySet", StringComparison.OrdinalIgnoreCase))
+                            {
+                                GetColumnsFromEntityTypeTableToEntitySetTable(entitySetsTables.AddTable(xmlReader.GetAttribute("Name")), entityTypeTables, xmlReader.GetAttribute("EntityType"));
                             }
                         }
-                        else
+                        if (!EndpointIsLoadAllEntities(_endpoint.Url))
                         {
-                            var table = entityTypeTables.AddTable(name);
-                            while (xmlReader.Read())
+                            var singleEntitySetSelected = entitySetsTables.GetTables().FirstOrDefault(obj => obj.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+                            entitySetsTables = new Schema();
+                            if (singleEntitySetSelected != null)
                             {
-                                if (xmlReader.NodeType == XmlNodeType.Element &&
-                                    xmlReader.Name.Equals("EntityType", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    if (xmlReader.GetAttribute("Name")?.Equals(name, StringComparison.OrdinalIgnoreCase) ?? false)
-                                    {
-                                        AddPropertiesFromXMLReaderToTable(xmlReader, table, entityTypeTables);
-                                    }
-                                    else if (xmlReader.GetAttribute("Name")?.Equals(name + "SalesLines", StringComparison.OrdinalIgnoreCase) ?? false)
-                                    {
-                                        table = entityTypeTables.AddTable(name + "SalesLines");
-                                        AddPropertiesFromXMLReaderToTable(xmlReader, table, entityTypeTables);
-                                    }
-                                    else if (xmlReader.GetAttribute("Name")?.Equals(name + "SalesInvLines", StringComparison.OrdinalIgnoreCase) ?? false)
-                                    {
-                                        table = entityTypeTables.AddTable(name + "SalesInvLines");
-                                        AddPropertiesFromXMLReaderToTable(xmlReader, table, entityTypeTables);
-                                    }
-                                }
-                                else if (xmlReader.NodeType == XmlNodeType.Element &&
-                                    xmlReader.Name.Equals("EntitySet", StringComparison.OrdinalIgnoreCase))
-                                {
-                                    GetColumnsFromEntityTypeTableToEntitySetTable(entitySetsTables.AddTable(xmlReader.GetAttribute("Name")), entityTypeTables, xmlReader.GetAttribute("EntityType"));
-                                }
+                                entitySetsTables.AddTable(singleEntitySetSelected);
                             }
                         }
                     }
@@ -667,10 +645,29 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 
         public static bool EndpointIsLoadAllEntities(string url)
         {
-            return url.EndsWith("/") ||
-                url.EndsWith("/data", StringComparison.OrdinalIgnoreCase) ||
+            bool result = url.EndsWith("/data", StringComparison.OrdinalIgnoreCase) ||
                 url.EndsWith("$metadata", StringComparison.OrdinalIgnoreCase) ||
                 Regex.IsMatch(url.Substring(url.LastIndexOf("/")), CRMTrilingVersionPattern);
+            if (!result && !string.IsNullOrEmpty(url))
+            {
+                var uri = new Uri(url.ToLower());
+                // Checking this kind of url https://api.businesscentral.dynamics.com/v2.0/7dd45d63-24fc-4edd-8ad8-5fd66b6f9733/BC17/ODataV4/Company('CRONUS%20UK%20Ltd.')
+                // Or this kind of url https://api.businesscentral.dynamics.com/v2.0/7dd45d63-24fc-4edd-8ad8-5fd66b6f9733/bc17/api/v2.0/companies(0f8058e0-affd-ea11-bb48-000d3a2fece2)
+                if (string.IsNullOrEmpty(uri.Query))
+                {
+                    var lastSegment = uri.Segments.LastOrDefault();
+                    if (!string.IsNullOrEmpty(lastSegment))
+                    {
+                        var companyRegex = new Regex(@"company\(\'(.)+\'\)");
+                        var companiesRegex = new Regex(@"companies\((.)+\)");
+                        if (companyRegex.IsMatch(lastSegment) || companiesRegex.IsMatch(lastSegment))
+                        {
+                            result = true;
+                        }
+                    }
+                }
+            }
+            return result;
         }
 
         private bool CheckLicense()

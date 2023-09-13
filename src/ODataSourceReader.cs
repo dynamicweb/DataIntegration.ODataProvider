@@ -574,9 +574,20 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             string checkUrl = url;
             if (url.Contains("?"))
             {
-                checkUrl = checkUrl.Split('?')[0];
+                bool urlContainsTop = url.Contains("&$top=", StringComparison.OrdinalIgnoreCase);
+                if (new Uri(url).Query.Any() && !urlContainsTop)
+                {
+                    checkUrl += "&$top=1";
+                }
+                else if (!urlContainsTop)
+                {
+                    checkUrl += "$top=1";
+                }
             }
-            checkUrl += "?$top=1";
+            else
+            {
+                checkUrl += "?$top=1";
+            }
             bool result = false;
             Task task;
             var endpointAuthentication = _endpoint.Authentication;
