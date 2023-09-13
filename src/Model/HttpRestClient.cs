@@ -372,13 +372,23 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider.Model
                         }
                         else
                         {
-							bool isEmptyPatchRequestResponse = response.StatusCode == HttpStatusCode.NoContent && string.IsNullOrEmpty(responseContent);
-							if (!isEmptyPatchRequestResponse)                            
+                            bool isEmptyPatchRequestResponse = response.StatusCode == HttpStatusCode.NoContent && string.IsNullOrEmpty(responseContent);
+                            if (!isEmptyPatchRequestResponse)
                             {
-								//Converting above JContainer to instance of requested type, and returns object to caller.
-								responseResult.Content = JsonSerializer.Deserialize<TResponse>(responseContent);
-							}
-						}
+                                /*
+                                 * Check if the caller is interested in some sort of JContainer, such as a JArray or JObject,
+                                 * at which point we simply return the above object immediately as such.
+                                 */
+                                var objResult = JToken.Parse(responseContent);
+                                if (typeof(TResponse) == typeof(JContainer))
+                                {
+                                    responseResult.Content = (TResponse)(object)objResult;
+                                }
+
+                                //Converting above JContainer to instance of requested type, and returns object to caller.
+                                responseResult.Content = objResult.ToObject<TResponse>();
+                            }
+                        }
 
                         // Finally, we can return result to caller.
                         return responseResult;
