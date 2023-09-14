@@ -2,7 +2,6 @@
 using Dynamicweb.DataIntegration.EndpointManagement;
 using Dynamicweb.DataIntegration.Providers.ODataProvider.Interfaces;
 using Dynamicweb.Logging;
-using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -63,7 +62,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider.Model
                 Credentials = credentials ?? throw new ArgumentNullException(nameof(credentials)),
                 PreAuthenticate = true
             };
-			if (SystemConfiguration.Instance.GetBoolean("/Globalsettings/Modules/EndpointManagement/SkipCertificateValidation"))
+            if (SystemConfiguration.Instance.GetBoolean("/Globalsettings/Modules/EndpointManagement/SkipCertificateValidation"))
             {
                 clientHandler.ServerCertificateCustomValidationCallback =
                     (httpRequestMessage, cert, cetChain, policyErrors) =>
@@ -375,18 +374,8 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider.Model
                             bool isEmptyPatchRequestResponse = response.StatusCode == HttpStatusCode.NoContent && string.IsNullOrEmpty(responseContent);
                             if (!isEmptyPatchRequestResponse)
                             {
-                                /*
-                                 * Check if the caller is interested in some sort of JContainer, such as a JArray or JObject,
-                                 * at which point we simply return the above object immediately as such.
-                                 */
-                                var objResult = JToken.Parse(responseContent);
-                                if (typeof(TResponse) == typeof(JContainer))
-                                {
-                                    responseResult.Content = (TResponse)(object)objResult;
-                                }
-
                                 //Converting above JContainer to instance of requested type, and returns object to caller.
-                                responseResult.Content = objResult.ToObject<TResponse>();
+                                responseResult.Content = JsonSerializer.Deserialize<TResponse>(responseContent);
                             }
                         }
 
