@@ -4,14 +4,13 @@ using Dynamicweb.DataIntegration.Integration;
 using Dynamicweb.DataIntegration.Integration.Interfaces;
 using Dynamicweb.DataIntegration.Providers.ODataProvider.Model;
 using Dynamicweb.Logging;
-using Newtonsoft.Json;
-using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Net;
 using System.Threading.Tasks;
+using System.Text.Json.Nodes;
 
 namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 {
@@ -25,7 +24,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         private Dictionary<string, Type> _destinationPrimaryKeyColumns;
         private readonly ColumnMappingCollection _responseMappings;
         public Mapping Mapping { get; }
-        internal JObject PostBackObject { get; set; }
+        internal JsonObject PostBackObject { get; set; }
 
         internal ODataWriter(ILogger logger, Mapping mapping, Endpoint endpoint, ICredentials credentials)
         {
@@ -42,18 +41,13 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 
         public void Write(Dictionary<string, object> Row)
         {
-            if (!Mapping.Conditionals.CheckConditionals(Row))
-            {
-                return;
-            }
-
             string endpointURL = Endpoint.Url;
             string url = ODataSourceReader.GetEndpointURL(endpointURL, Mapping.DestinationTable.Name, "");
 
             var columnMappings = Mapping.GetColumnMappings();
             var keyColumnValuesForFilter = GetKeyColumnValuesForFilter(Row, columnMappings);
 
-            Task<RestResponse<JObject>> awaitResponseFromEndpoint;
+            Task<RestResponse<JsonObject>> awaitResponseFromEndpoint;
             if (keyColumnValuesForFilter.Any())
             {
                 string filter = string.Join(" and ", keyColumnValuesForFilter);
@@ -70,7 +64,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 }
                 url = ODataSourceReader.GetEndpointURL(endpointURL, Mapping.DestinationTable.Name, "", parameters);
 
-                var responseFromEndpoint = GetFromEndpoint<JObject>(url, null);
+                var responseFromEndpoint = GetFromEndpoint<JsonObject>(url, null);
                 if (!string.IsNullOrEmpty(responseFromEndpoint?.Result?.Error))
                 {
                     if (responseFromEndpoint.Result.Status == HttpStatusCode.Unauthorized)
@@ -91,10 +85,11 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                         throw new Exception("The filter returned too many records, please update or change filter.");
                     }
 
-                    Logger?.Info($"Recieved response from Endpoint = {response[0].ToString(Formatting.None)}");
+                    var jObject = response[0];
+                    Logger?.Info($"Recieved response from Endpoint = {jObject.ToJsonString()}");
 
                     var patchJson = MapValuesToJSon(columnMappings, Row, true);
-                    if (patchJson.Equals(new JObject().ToString()))
+                    if (patchJson.Equals(new JsonObject().ToString()))
                     {
                         Logger?.Info($"Skipped PATCH as no active column mappings is added for always apply.");
                         return;
@@ -103,7 +98,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                     Dictionary<string, string> headers = new Dictionary<string, string>() { { "Content-Type", "application/json; charset=utf-8" } };
 
                     List<string> primaryKeyColumnValuesForPatch = new List<string>();
-                    foreach (KeyValuePair<string, JToken> item in response[0])
+                    foreach (var item in jObject)
                     {
                         if (item.Key.Equals("@odata.etag", StringComparison.OrdinalIgnoreCase))
                         {
@@ -126,16 +121,16 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                         string patchURL = "(" + string.Join(",", primaryKeyColumnValuesForPatch) + ")";
                         url = ODataSourceReader.GetEndpointURL(endpointURL, Mapping.DestinationTable.Name, patchURL);
                     }
-                    awaitResponseFromEndpoint = PostToEndpoint<JObject>(url, patchJson, headers, true);
+                    awaitResponseFromEndpoint = PostToEndpoint<JsonObject>(url, patchJson, headers, true);
                 }
                 else
                 {
-                    awaitResponseFromEndpoint = PostToEndpoint<JObject>(url, MapValuesToJSon(columnMappings, Row, false), null, false);
+                    awaitResponseFromEndpoint = PostToEndpoint<JsonObject>(url, MapValuesToJSon(columnMappings, Row, false), null, false);
                 }
             }
             else
             {
-                awaitResponseFromEndpoint = PostToEndpoint<JObject>(url, MapValuesToJSon(columnMappings, Row, false), null, false);
+                awaitResponseFromEndpoint = PostToEndpoint<JsonObject>(url, MapValuesToJSon(columnMappings, Row, false), null, false);
             }
             awaitResponseFromEndpoint.Wait();
             if (!string.IsNullOrEmpty(awaitResponseFromEndpoint?.Result?.Error))
@@ -147,7 +142,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 
             if (awaitResponseFromEndpoint?.Result?.Status != HttpStatusCode.NoContent)
             {
-                Logger?.Info($"Recieved response from Endpoint = {PostBackObject?.ToString(Formatting.None)}");
+                Logger?.Info($"Recieved response from Endpoint = {PostBackObject?.ToJsonString()}");
             }
             else if (_responseMappings.Any())
             {
@@ -159,16 +154,16 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             }
         }
 
-        internal string GetPostBackValue(ColumnMapping columnMapping)
+        internal object GetPostBackValue(ColumnMapping columnMapping)
         {
             string result = null;
             try
             {
-                foreach (KeyValuePair<string, JToken> item in PostBackObject)
+                foreach (var item in PostBackObject)
                 {
                     if (item.Key.Equals(columnMapping?.SourceColumn?.Name, StringComparison.OrdinalIgnoreCase))
                     {
-                        return HandleScriptTypeForColumnMapping(columnMapping, item.Value.ToString());
+                        return columnMapping.ConvertInputValueToOutputValue(item.Value.ToString());
                     }
                 }
             }
@@ -226,27 +221,6 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             awaitResponseFromEndpoint.Wait();
 
             return awaitResponseFromEndpoint;
-        }        
-
-        public static string HandleScriptTypeForColumnMapping(ColumnMapping columnMapping, object columnValue)
-        {
-            string result = Converter.ToString(columnValue);
-            switch (columnMapping.ScriptType)
-            {
-                case ScriptType.Append:
-                    result = columnMapping.ConvertInputToOutputFormat(columnValue).ToString() + columnMapping.ScriptValue;
-                    break;
-                case ScriptType.Prepend:
-                    result = columnMapping.ScriptValue + columnMapping.ConvertInputToOutputFormat(columnValue).ToString();
-                    break;
-                case ScriptType.Constant:
-                    result = columnMapping.ScriptValue;
-                    break;
-                case ScriptType.NewGuid:
-                    result = columnMapping.GetScriptValue();
-                    break;
-            }
-            return result;
         }
 
         internal List<string> GetKeyColumnValuesForFilter(Dictionary<string, object> row, ColumnMappingCollection columnMappings)
@@ -256,11 +230,11 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             {
                 if (keyMapping.DestinationColumn.Type == typeof(string))
                 {
-                    keyColumnValues.Add($"{keyMapping.DestinationColumn.Name} eq '{HandleScriptTypeForColumnMapping(keyMapping, row[keyMapping.SourceColumn.Name])}'");
+                    keyColumnValues.Add($"{keyMapping.DestinationColumn.Name} eq '{keyMapping.ConvertInputValueToOutputValue(row[keyMapping.SourceColumn.Name])}'");
                 }
                 else
                 {
-                    keyColumnValues.Add($"{keyMapping.DestinationColumn.Name} eq {HandleScriptTypeForColumnMapping(keyMapping, row[keyMapping.SourceColumn.Name])}");
+                    keyColumnValues.Add($"{keyMapping.DestinationColumn.Name} eq {keyMapping.ConvertInputValueToOutputValue(row[keyMapping.SourceColumn.Name])}");
                 }
             }
             return keyColumnValues;
@@ -268,7 +242,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 
         internal string MapValuesToJSon(ColumnMappingCollection columnMappings, Dictionary<string, object> row, bool isPatchRequest)
         {
-            JObject jObject = new JObject();
+            var jsonObject = new JsonObject();
 
             foreach (ColumnMapping columnMapping in columnMappings)
             {
@@ -277,38 +251,38 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 
                 if (columnMapping.HasScriptWithValue || row.ContainsKey(columnMapping.SourceColumn?.Name))
                 {
-                    var columnValue = HandleScriptTypeForColumnMapping(columnMapping, row[columnMapping.SourceColumn?.Name] ?? null);
+                    var columnValue = columnMapping.ConvertInputValueToOutputValue(row[columnMapping.SourceColumn?.Name] ?? null);
 
                     switch (columnMapping.DestinationColumn.Type.Name.ToLower())
                     {
                         case "decimal":
-                            jObject.Add(columnMapping.DestinationColumn.Name, Converter.ToDecimal(columnValue));
+                            jsonObject.Add(columnMapping.DestinationColumn.Name, Converter.ToDecimal(columnValue));
                             break;
                         case "int":
-                            jObject.Add(columnMapping.DestinationColumn.Name, Converter.ToInt64(columnValue));
+                            jsonObject.Add(columnMapping.DestinationColumn.Name, Converter.ToInt64(columnValue));
                             break;
                         case "double":
-                            jObject.Add(columnMapping.DestinationColumn.Name, Converter.ToDecimal(columnValue));
+                            jsonObject.Add(columnMapping.DestinationColumn.Name, Converter.ToDecimal(columnValue));
                             break;
                         case "datetime":
                             var dateTime = Converter.ToDateTime(columnValue);
                             DateTime dateTimeInUtc = TimeZoneInfo.ConvertTimeToUtc(dateTime);
                             if (dateTimeInUtc.TimeOfDay.TotalMilliseconds > 0)
                             {
-                                jObject.Add(columnMapping.DestinationColumn.Name, dateTimeInUtc.ToString("yyyy-MM-ddTHH:mm:ss.fff", CultureInfo.InvariantCulture) + "z");
+                                jsonObject.Add(columnMapping.DestinationColumn.Name, dateTimeInUtc.ToString("yyyy-MM-ddTHH:mm:ss.fff", CultureInfo.InvariantCulture) + "z");
                             }
                             else
                             {
-                                jObject.Add(columnMapping.DestinationColumn.Name, dateTimeInUtc.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + "z");
+                                jsonObject.Add(columnMapping.DestinationColumn.Name, dateTimeInUtc.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + "z");
                             }
                             break;
                         default:
-                            jObject.Add(columnMapping.DestinationColumn.Name, Converter.ToString(columnValue));
+                            jsonObject.Add(columnMapping.DestinationColumn.Name, Converter.ToString(columnValue));
                             break;
                     }
                 }
             }
-            return jObject.ToString();
+            return jsonObject.ToString();
         }
 
         public void Dispose() { }
