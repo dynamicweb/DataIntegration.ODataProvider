@@ -2,7 +2,6 @@
 using Dynamicweb.DataIntegration.EndpointManagement;
 using Dynamicweb.DataIntegration.Providers.ODataProvider.Interfaces;
 using Dynamicweb.Logging;
-using Newtonsoft.Json.Linq;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -63,7 +62,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider.Model
                 Credentials = credentials ?? throw new ArgumentNullException(nameof(credentials)),
                 PreAuthenticate = true
             };
-			if (SystemConfiguration.Instance.GetBoolean("/Globalsettings/Modules/EndpointManagement/SkipCertificateValidation"))
+            if (SystemConfiguration.Instance.GetBoolean("/Globalsettings/Modules/EndpointManagement/SkipCertificateValidation"))
             {
                 clientHandler.ServerCertificateCustomValidationCallback =
                     (httpRequestMessage, cert, cetChain, policyErrors) =>
@@ -372,13 +371,13 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider.Model
                         }
                         else
                         {
-							bool isEmptyPatchRequestResponse = response.StatusCode == HttpStatusCode.NoContent && string.IsNullOrEmpty(responseContent);
-							if (!isEmptyPatchRequestResponse)                            
+                            bool isEmptyPatchRequestResponse = response.StatusCode == HttpStatusCode.NoContent && string.IsNullOrEmpty(responseContent);
+                            if (!isEmptyPatchRequestResponse)
                             {
-								//Converting above JContainer to instance of requested type, and returns object to caller.
-								responseResult.Content = JsonSerializer.Deserialize<TResponse>(responseContent);
-							}
-						}
+                                //Converting above JContainer to instance of requested type, and returns object to caller.
+                                responseResult.Content = JsonSerializer.Deserialize<TResponse>(responseContent);
+                            }
+                        }
 
                         // Finally, we can return result to caller.
                         return responseResult;

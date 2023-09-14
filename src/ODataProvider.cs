@@ -26,9 +26,10 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
     [AddInDescription("OData provider")]
     [AddInIgnore(false)]
     [AddInUseParameterSectioning(true)]
+    [ResponseMapping(true)]
     public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOptions, IODataBaseProvider
     {
-        internal readonly EndpointService _endpointService = new EndpointService();
+        internal readonly EndpointService _endpointService = new EndpointService();     
         internal Schema _schema;
         internal Endpoint _endpoint;
         internal ICredentials _credentials;
@@ -241,6 +242,10 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             if (_endpoint != null)
             {
                 var endpointAuthentication = _endpoint.Authentication;
+                if (endpointAuthentication != null)
+                {
+                    SetCredentials();
+                }
                 Task metadataResponse;
                 if (endpointAuthentication.IsTokenBased())
                 {
@@ -410,7 +415,8 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         }
 
         public override string ValidateSourceSettings()
-        {
+        {   
+            SetCredentials();
             if (string.IsNullOrEmpty(EndpointId))
             {
                 return "Predefined endpoint can not be empty. Please select any predefined endpoint.";
@@ -437,6 +443,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 
         public override string ValidateDestinationSettings()
         {
+        	SetCredentials();            
             if (string.IsNullOrEmpty(DestinationEndpointId))
             {
                 return "Destination endpoint can not be empty. Please select any destination endpoint";
@@ -616,17 +623,52 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 }
 
                 Logger?.Log($"Begin synchronizing '{mapping.SourceTable.Name}' to '{mapping.DestinationTable.Name}'.");
+                
                 using (var writer = new ODataWriter(Logger, mapping, _endpoint, _credentials))
                 {
                     using (ISourceReader sourceReader = mapping.Source.GetReader(mapping))
                     {
                         try
                         {
+                            bool sourceReaderIsResponseWriter = sourceReader is IResponseWriter;
+                            IResponseWriter responseMappingWriter = null;
+                            if (sourceReaderIsResponseWriter)
+                            {
+                                responseMappingWriter = (IResponseWriter)sourceReader;
+                            }
+                            var responseMappingCollection = mapping.GetResponseColumnMappings();
                             while (!sourceReader.IsDone())
                             {
                                 var sourceRow = sourceReader.GetNext();
                                 ProcessInputRow(mapping, sourceRow);
                                 writer.Write(sourceRow);
+                                if (sourceReaderIsResponseWriter)
+                                {
+                                    if (writer.PostBackObject != null && writer.PostBackObject.Count > 0)
+                                    {
+                                        Dictionary<string, object> responseToWrite = new Dictionary<string, object>();
+                                        foreach (var item in responseMappingCollection)
+                                        {
+                                            if (item.HasScriptWithValue)
+                                            {
+                                                responseToWrite.Add(item.DestinationColumn.Name, item.GetScriptValue());
+                                            }
+                                            else
+                                            {
+                                                var postBackValue = writer.GetPostBackValue(item);
+                                                if (postBackValue != null)
+                                                {
+                                                    responseToWrite.Add(item.DestinationColumn.Name, postBackValue);
+                                                }
+                                            }
+                                        }
+                                        responseMappingWriter.Write(responseToWrite);
+                                    }
+                                }
+                            }
+                            if (responseMappingWriter != null)
+                            {
+                                responseMappingWriter.Close();
                             }
                         }
                         catch (Exception e)
