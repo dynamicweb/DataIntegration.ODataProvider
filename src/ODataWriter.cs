@@ -85,8 +85,8 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                         throw new Exception("The filter returned too many records, please update or change filter.");
                     }
 
-                    var jObject = response[0];
-                    Logger?.Info($"Recieved response from Endpoint = {jObject.ToJsonString()}");
+                    var jsonObject = response[0];
+                    Logger?.Info($"Recieved response from Endpoint = {jsonObject.ToJsonString()}");
 
                     var patchJson = MapValuesToJSon(columnMappings, Row, true);
                     if (patchJson.Equals(new JsonObject().ToString()))
@@ -98,7 +98,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                     Dictionary<string, string> headers = new Dictionary<string, string>() { { "Content-Type", "application/json; charset=utf-8" } };
 
                     List<string> primaryKeyColumnValuesForPatch = new List<string>();
-                    foreach (var item in jObject)
+                    foreach (var item in jsonObject)
                     {
                         if (item.Key.Equals("@odata.etag", StringComparison.OrdinalIgnoreCase))
                         {
