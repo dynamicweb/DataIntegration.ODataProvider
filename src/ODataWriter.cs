@@ -230,11 +230,11 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             {
                 if (keyMapping.DestinationColumn.Type == typeof(string))
                 {
-                    keyColumnValues.Add($"{keyMapping.DestinationColumn.Name} eq '{keyMapping.ConvertInputValueToOutputValue(row[keyMapping.SourceColumn.Name])}'");
+                    keyColumnValues.Add($"{keyMapping.DestinationColumn.Name} eq '{keyMapping.ConvertInputValueToOutputValue(row[keyMapping.SourceColumn?.Name] ?? null)}'");
                 }
                 else
                 {
-                    keyColumnValues.Add($"{keyMapping.DestinationColumn.Name} eq {keyMapping.ConvertInputValueToOutputValue(row[keyMapping.SourceColumn.Name])}");
+                    keyColumnValues.Add($"{keyMapping.DestinationColumn.Name} eq {keyMapping.ConvertInputValueToOutputValue(row[keyMapping.SourceColumn?.Name] ?? null)}");
                 }
             }
             return keyColumnValues;
