@@ -29,7 +29,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
     [ResponseMapping(true)]
     public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOptions, IODataBaseProvider
     {
-        internal readonly EndpointService _endpointService = new EndpointService();     
+        internal readonly EndpointService _endpointService = new EndpointService();
         internal Schema _schema;
         internal Endpoint _endpoint;
         internal ICredentials _credentials;
@@ -165,8 +165,8 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                     {
                         return new List<ParameterOption>()
                         {
-                            { new("Delta replication|This mode filters records on date and time, whenever possible, and it only acts on new or updated records. It never deletes.","Delta Replication") },
-                            { new("First page|If maximum page size is 100 then this setting only handles the 100 records of the first page.", "First page") }
+                            { new("Delta replication", "Delta Replication") { Hint = "This mode filters records on date and time, whenever possible, and it only acts on new or updated records. It never deletes." } },
+                            { new("First page", "First page") { Hint = "If maximum page size is 100 then this setting only handles the 100 records of the first page." } }
                         };
                     }
 
@@ -415,7 +415,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         }
 
         public override string ValidateSourceSettings()
-        {   
+        {
             SetCredentials();
             if (string.IsNullOrEmpty(EndpointId))
             {
@@ -443,7 +443,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 
         public override string ValidateDestinationSettings()
         {
-        	SetCredentials();            
+            SetCredentials();
             if (string.IsNullOrEmpty(DestinationEndpointId))
             {
                 return "Destination endpoint can not be empty. Please select any destination endpoint";
@@ -623,7 +623,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 }
 
                 Logger?.Log($"Begin synchronizing '{mapping.SourceTable.Name}' to '{mapping.DestinationTable.Name}'.");
-                
+
                 using (var writer = new ODataWriter(Logger, mapping, _endpoint, _credentials))
                 {
                     using (ISourceReader sourceReader = mapping.Source.GetReader(mapping))

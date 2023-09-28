@@ -319,7 +319,6 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 {
                     string condition = item.Condition;
                     string operatorInOData = "";
-                    bool isAlreadyAddedToResult = false;
                     switch (item.ConditionalOperator)
                     {
                         case ConditionalOperator.EqualTo:
@@ -336,12 +335,10 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                             break;
                         case ConditionalOperator.Contains:
                             result.Add($"contains({item.SourceColumn.Name},'{item.Condition}')");
-                            isAlreadyAddedToResult = true;
-                            break;
+                            continue;
                         case ConditionalOperator.NotContains:
                             result.Add($"contains({item.SourceColumn.Name},'{item.Condition}') ne true");
-                            isAlreadyAddedToResult = true;
-                            break;
+                            continue;
                         case ConditionalOperator.In:
                             operatorInOData = "eq";
                             List<string> equalConditions = item.Condition.Split(',').Select(val => val.Trim()).ToList();
@@ -368,32 +365,25 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                             break;
                         case ConditionalOperator.StartsWith:
                             result.Add($"startswith({item.SourceColumn.Name},'{item.Condition}')");
-                            isAlreadyAddedToResult = true;
-                            break;
+                            continue;
                         case ConditionalOperator.NotStartsWith:
                             result.Add($"startswith({item.SourceColumn.Name},'{item.Condition}') ne true");
-                            isAlreadyAddedToResult = true;
-                            break;
+                            continue;
                         case ConditionalOperator.EndsWith:
                             result.Add($"endswith({item.SourceColumn.Name},'{item.Condition}')");
-                            isAlreadyAddedToResult = true;
-                            break;
+                            continue;
                         case ConditionalOperator.NotEndsWith:
                             result.Add($"endswith({item.SourceColumn.Name},'{item.Condition}') ne true");
-                            isAlreadyAddedToResult = true;
-                            break;
+                            continue;
 
                     }
-                    if (!isAlreadyAddedToResult)
+                    if (item.SourceColumn.Type == typeof(string))
                     {
-                        if (item.SourceColumn.Type == typeof(string))
-                        {
-                            result.Add($"({item.SourceColumn.Name} {operatorInOData} '{condition}')");
-                        }
-                        else
-                        {
-                            result.Add($"({item.SourceColumn.Name} {operatorInOData} {condition})");
-                        }
+                        result.Add($"({item.SourceColumn.Name} {operatorInOData} '{condition}')");
+                    }
+                    else
+                    {
+                        result.Add($"({item.SourceColumn.Name} {operatorInOData} {condition})");
                     }
                 }
             }
@@ -594,7 +584,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             if (endpointAuthentication.IsTokenBased())
             {
                 string token = OAuthHelper.GetToken(_endpoint, endpointAuthentication, out Exception exception);
-                if (exception != null) 
+                if (exception != null)
                 {
                     throw exception;
                 }
