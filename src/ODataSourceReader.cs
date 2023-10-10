@@ -317,77 +317,133 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             {
                 foreach (var item in mappingConditionals)
                 {
-                    string condition = item.Condition;
-                    string operatorInOData = "";
-                    switch (item.ConditionalOperator)
+                    if (item.Condition != null)
                     {
-                        case ConditionalOperator.EqualTo:
-                            operatorInOData = "eq";
-                            break;
-                        case ConditionalOperator.LessThan:
-                            operatorInOData = "lt";
-                            break;
-                        case ConditionalOperator.GreaterThan:
-                            operatorInOData = "gt";
-                            break;
-                        case ConditionalOperator.DifferentFrom:
-                            operatorInOData = "ne";
-                            break;
-                        case ConditionalOperator.Contains:
-                            result.Add($"contains({item.SourceColumn.Name},'{item.Condition}')");
-                            continue;
-                        case ConditionalOperator.NotContains:
-                            result.Add($"contains({item.SourceColumn.Name},'{item.Condition}') ne true");
-                            continue;
-                        case ConditionalOperator.In:
-                            operatorInOData = "eq";
-                            List<string> equalConditions = item.Condition.Split(',').Select(val => val.Trim()).ToList();
-                            if (item.SourceColumn.Type == typeof(string))
-                            {
-                                condition = $"{string.Join($"' or {item.SourceColumn.Name} eq '", equalConditions)}";
-                            }
-                            else
-                            {
-                                condition = $"{string.Join($" or {item.SourceColumn.Name} eq ", equalConditions)}";
-                            }
-                            break;
-                        case ConditionalOperator.NotIn:
-                            operatorInOData = "ne";
-                            List<string> notEqualConditions = item.Condition.Split(',').Select(val => val.Trim()).ToList();
-                            if (item.SourceColumn.Type == typeof(string))
-                            {
-                                condition = $"{string.Join($"' and {item.SourceColumn.Name} ne '", notEqualConditions)}";
-                            }
-                            else
-                            {
-                                condition = $"{string.Join($" and {item.SourceColumn.Name} ne ", notEqualConditions)}";
-                            }
-                            break;
-                        case ConditionalOperator.StartsWith:
-                            result.Add($"startswith({item.SourceColumn.Name},'{item.Condition}')");
-                            continue;
-                        case ConditionalOperator.NotStartsWith:
-                            result.Add($"startswith({item.SourceColumn.Name},'{item.Condition}') ne true");
-                            continue;
-                        case ConditionalOperator.EndsWith:
-                            result.Add($"endswith({item.SourceColumn.Name},'{item.Condition}')");
-                            continue;
-                        case ConditionalOperator.NotEndsWith:
-                            result.Add($"endswith({item.SourceColumn.Name},'{item.Condition}') ne true");
-                            continue;
+                        string condition = item.Condition;
+                        string operatorInOData = "";
+                        switch (item.ConditionalOperator)
+                        {
+                            case ConditionalOperator.EqualTo:
+                                operatorInOData = "eq";
+                                break;
+                            case ConditionalOperator.LessThan:
+                                operatorInOData = "lt";
+                                break;
+                            case ConditionalOperator.GreaterThan:
+                                operatorInOData = "gt";
+                                break;
+                            case ConditionalOperator.DifferentFrom:
+                                operatorInOData = "ne";
+                                break;
+                            case ConditionalOperator.Contains:
+                                if (item.SourceColumn.Type == typeof(string))
+                                {
+                                    result.Add($"contains({item.SourceColumn.Name},'{item.Condition}')");
+                                }
+                                else
+                                {
+                                    LogWarningForConditional(item);
+                                }
+                                continue;
+                            case ConditionalOperator.NotContains:
+                                if (item.SourceColumn.Type == typeof(string))
+                                {
+                                    result.Add($"contains({item.SourceColumn.Name},'{item.Condition}') ne true");
+                                }
+                                else
+                                {
+                                    LogWarningForConditional(item);
+                                }
+                                continue;
+                            case ConditionalOperator.In:
+                                operatorInOData = "eq";
+                                List<string> equalConditions = item.Condition.Split(',').Select(val => val.Trim()).ToList();
+                                if (item.SourceColumn.Type == typeof(string))
+                                {
+                                    condition = $"{string.Join($"' or {item.SourceColumn.Name} eq '", equalConditions)}";
+                                }
+                                else
+                                {
+                                    condition = $"{string.Join($" or {item.SourceColumn.Name} eq ", equalConditions)}";
+                                }
+                                break;
+                            case ConditionalOperator.NotIn:
+                                operatorInOData = "ne";
+                                List<string> notEqualConditions = item.Condition.Split(',').Select(val => val.Trim()).ToList();
+                                if (item.SourceColumn.Type == typeof(string))
+                                {
+                                    condition = $"{string.Join($"' and {item.SourceColumn.Name} ne '", notEqualConditions)}";
+                                }
+                                else
+                                {
+                                    condition = $"{string.Join($" and {item.SourceColumn.Name} ne ", notEqualConditions)}";
+                                }
+                                break;
+                            case ConditionalOperator.StartsWith:
+                                if (item.SourceColumn.Type == typeof(string))
+                                {
+                                    result.Add($"startswith({item.SourceColumn.Name},'{item.Condition}')");
+                                }
+                                else
+                                {
+                                    LogWarningForConditional(item);
+                                }
+                                continue;
+                            case ConditionalOperator.NotStartsWith:
+                                if (item.SourceColumn.Type == typeof(string))
+                                {
+                                    result.Add($"startswith({item.SourceColumn.Name},'{item.Condition}') ne true");
+                                }
+                                else
+                                {
+                                    LogWarningForConditional(item);
+                                }
+                                continue;
+                            case ConditionalOperator.EndsWith:
+                                if (item.SourceColumn.Type == typeof(string))
+                                {
+                                    result.Add($"endswith({item.SourceColumn.Name},'{item.Condition}')");
+                                }
+                                else
+                                {
+                                    LogWarningForConditional(item);
+                                }
+                                continue;
+                            case ConditionalOperator.NotEndsWith:
+                                if (item.SourceColumn.Type == typeof(string))
+                                {
+                                    result.Add($"endswith({item.SourceColumn.Name},'{item.Condition}') ne true");
+                                }
+                                else
+                                {
+                                    LogWarningForConditional(item);
+                                }
+                                continue;
 
-                    }
-                    if (item.SourceColumn.Type == typeof(string))
-                    {
-                        result.Add($"({item.SourceColumn.Name} {operatorInOData} '{condition}')");
+                        }
+                        var conditionToAdd = $"{condition}";
+                        if (item.SourceColumn.Type == typeof(string))
+                        {
+                            conditionToAdd = $"'{condition}'";
+                        }
+                        else if (item.SourceColumn.Type == typeof(bool))
+                        {
+                            conditionToAdd = $"{condition.ToLower()}";
+                        }
+                        result.Add($"({item.SourceColumn.Name} {operatorInOData} {conditionToAdd})");
                     }
                     else
                     {
-                        result.Add($"({item.SourceColumn.Name} {operatorInOData} {condition})");
+                        _logger?.Warn($"The condition for the table mapping {_mapping.SourceTable.Name} to {_mapping.DestinationTable.Name} on source column {item.SourceColumn.Name} is null, so this have been removed from the $filter.");
                     }
                 }
             }
             return result;
+        }
+
+        private void LogWarningForConditional(MappingConditional item)
+        {
+            _logger?.Warn($"Can only add {item.ConditionalOperator} on Edm.String and the {item.SourceColumn.Name} is a type of {item.SourceColumn.Type.Name} for the table mapping {_mapping.SourceTable.Name} to {_mapping.DestinationTable.Name}, so this have been removed from the $filter.");
         }
 
         /// <summary>
