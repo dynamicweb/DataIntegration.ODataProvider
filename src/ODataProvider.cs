@@ -396,7 +396,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             SetCredentials();
             if (!CheckLicense())
             {
-                return null;
+                throw new Exception("License check for OData failed.");
             }
 
             if (!string.IsNullOrEmpty(Mode))
