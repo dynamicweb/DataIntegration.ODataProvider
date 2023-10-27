@@ -33,7 +33,6 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         internal Schema _schema;
         internal Endpoint _endpoint;
         internal ICredentials _credentials;
-        internal ODataSourceReader _endpointSourceReader;
         private const string OldBCBatch = "eCom_DataIntegrationERPBatch";
         private const string BCBatch = "eCom_DataIntegrationERPBatch_BC";
         private const string CRMBatch = "eCom_DataIntegrationERPBatch_CRM";
@@ -96,6 +95,12 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         [AddInParameterSection("Advanced activity settings")]
         public bool DoNotStoreLastResponseInLogFile { get; set; }
 
+        [AddInParameter("Delta modifier")]
+        [AddInParameterEditor(typeof(TextParameterEditor), "infoText=Add your own delta properties. Default looking at these properties: Last_Date_Modified, Order_Date, LastDateTimeModified, lastModifiedDateTime and modifiedon.;inputClass=NewUIinput;")]
+        [AddInParameterGroup("Source")]
+        [AddInParameterSection("Advanced activity settings")]
+        public string DeltaModifier { get; set; }
+
         #endregion
 
         #region AddInManager/ConfigurableAddIn Destination
@@ -137,7 +142,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 
         private string GetEntityName()
         {
-            return new Uri(_endpoint.Url).Segments.LastOrDefault() ?? "";
+            return new Uri(_endpoint.Url).Segments.LastOrDefault().TrimEnd('/') ?? "";
         }
 
         internal void SetCredentials()
@@ -404,8 +409,8 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 RequestIntervals = 0;
                 DoNotStoreLastResponseInLogFile = false;
             }
-            _endpointSourceReader = new ODataSourceReader(new HttpRestClient(_credentials, RequestTimeout), Logger, mapping, _endpoint, Mode, MaximumPageSize, RunLastRequest, RequestIntervals, DoNotStoreLastResponseInLogFile);
-            return _endpointSourceReader;
+
+            return new ODataSourceReader(new HttpRestClient(_credentials, RequestTimeout), Logger, mapping, _endpoint, Mode, DeltaModifier, MaximumPageSize, _endpointAuthenticationService, RunLastRequest, RequestIntervals, DoNotStoreLastResponseInLogFile);
         }
 
         /// <inheritdoc />
@@ -479,6 +484,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         {
             ODataProvider newProvider = (ODataProvider)source;
             Mode = newProvider.Mode;
+            DeltaModifier = newProvider.DeltaModifier;
             MaximumPageSize = newProvider.MaximumPageSize;
             RequestTimeout = newProvider.RequestTimeout;
             RunLastRequest = newProvider.RunLastRequest;
@@ -502,6 +508,12 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                         if (node.HasChildNodes)
                         {
                             Mode = node.FirstChild.Value;
+                        }
+                        break;
+                    case "Deltamodifier":
+                        if (node.HasChildNodes)
+                        {
+                            DeltaModifier = node.FirstChild.Value;
                         }
                         break;
                     case "Maximumpagesize":
@@ -556,6 +568,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             var root = new XElement("Parameters");
             document.Add(root);
             root.Add(CreateParameterNode(GetType(), "Mode", Mode));
+            root.Add(CreateParameterNode(GetType(), "Delta modifier", DeltaModifier));
             root.Add(CreateParameterNode(GetType(), "Maximum page size", MaximumPageSize.ToString()));
             root.Add(CreateParameterNode(GetType(), "Request timeout (minutes)", RequestTimeout.ToString()));
             root.Add(CreateParameterNode(GetType(), "Run last response", RunLastRequest.ToString()));
@@ -570,6 +583,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         public override void SaveAsXml(XmlTextWriter textWriter)
         {
             textWriter.WriteElementString("Mode", Mode);
+            textWriter.WriteElementString("Deltamodifier", DeltaModifier);
             textWriter.WriteElementString("Maximumpagesize", MaximumPageSize.ToString());
             textWriter.WriteElementString("Requesttimeout", RequestTimeout.ToString());
             textWriter.WriteElementString("Runlastrequest", RunLastRequest.ToString());
