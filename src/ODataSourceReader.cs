@@ -26,6 +26,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         private readonly Mapping _mapping;
         private readonly Endpoint _endpoint;
         private readonly string _mode;
+        private readonly string _deltaModifier;
         private readonly int _maximumPageSize;
         private readonly string _nextPaginationUrlName;
         private Dictionary<string, object> _nextItem;
@@ -93,7 +94,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         /// <param name="mapping">The mapping.</param>
         /// <param name="endpoint">The endpoint.</param>
         /// <param name="nextPaginationUrlName">Name of the next pagination URL. "odata.nextLink" (case insensitive) is supposed to be a standard.</param>
-        internal ODataSourceReader(IHttpRestClient httpRestClient, ILogger logger, Mapping mapping, Endpoint endpoint, string mode, int maximumPageSize, bool readFromLastRequestResponse, int requestIntervals, bool doNotStoreLastResponseInLogFile, string nextPaginationUrlName = "odata.nextLink")
+        internal ODataSourceReader(IHttpRestClient httpRestClient, ILogger logger, Mapping mapping, Endpoint endpoint, string mode, string deltaModifier, int maximumPageSize, bool readFromLastRequestResponse, int requestIntervals, bool doNotStoreLastResponseInLogFile, string nextPaginationUrlName = "odata.nextLink")
         {
             _totalResponseResult = new List<Dictionary<string, object>>();
             _httpRestClient = httpRestClient;
@@ -101,6 +102,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             _mapping = mapping;
             _endpoint = endpoint;
             _mode = mode;
+            _deltaModifier = deltaModifier;
             _maximumPageSize = maximumPageSize;
             _nextPaginationUrlName = nextPaginationUrlName;
             _requestIntervals = requestIntervals;
@@ -246,29 +248,46 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                     string dateTimeFilterName = "";
                     bool isEdmDate = false;
 
-                    foreach (var column in _mapping.SourceTable.Columns)
+                    if (!string.IsNullOrEmpty(_deltaModifier))
                     {
-                        switch (column.Name)
+                        List<string> deltaModifiers = _deltaModifier.Split(',').Select(val => val.Trim()).ToList();
+                        foreach (var delta in deltaModifiers)
                         {
-                            case "Last_Date_Modified":
-                                dateTimeFilterName = "Last_Date_Modified";
-                                isEdmDate = true;
+                            if (_mapping.SourceTable.Columns.Any(obj => obj.Name.Equals(delta, StringComparison.OrdinalIgnoreCase)))
+                            {
+                                dateTimeFilterName = _mapping.SourceTable.Columns.Where(obj => obj.Name.Equals(delta, StringComparison.OrdinalIgnoreCase)).First().Name;
                                 break;
-                            case "Order_Date":
-                                dateTimeFilterName = "Order_Date";
-                                isEdmDate = true;
-                                break;
-                            case "LastDateTimeModified":
-                                dateTimeFilterName = "LastDateTimeModified";
-                                break;
-                            case "lastModifiedDateTime":
-                                dateTimeFilterName = "lastModifiedDateTime";
-                                break;
-                            case "modifiedon":
-                                dateTimeFilterName = "modifiedon";
-                                break;
+                            }
                         }
                     }
+
+                    if (string.IsNullOrWhiteSpace(dateTimeFilterName))
+                    {
+                        foreach (var column in _mapping.SourceTable.Columns)
+                        {
+                            switch (column.Name)
+                            {
+                                case "Last_Date_Modified":
+                                    dateTimeFilterName = "Last_Date_Modified";
+                                    isEdmDate = true;
+                                    break;
+                                case "Order_Date":
+                                    dateTimeFilterName = "Order_Date";
+                                    isEdmDate = true;
+                                    break;
+                                case "LastDateTimeModified":
+                                    dateTimeFilterName = "LastDateTimeModified";
+                                    break;
+                                case "lastModifiedDateTime":
+                                    dateTimeFilterName = "lastModifiedDateTime";
+                                    break;
+                                case "modifiedon":
+                                    dateTimeFilterName = "modifiedon";
+                                    break;
+                            }
+                        }
+                    }
+
                     if (!string.IsNullOrWhiteSpace(dateTimeFilterName))
                     {
                         if (isEdmDate)
