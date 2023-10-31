@@ -410,7 +410,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 DoNotStoreLastResponseInLogFile = false;
             }
 
-            return new ODataSourceReader(new HttpRestClient(_credentials, RequestTimeout), Logger, mapping, _endpoint, Mode, DeltaModifier, MaximumPageSize, _endpointAuthenticationService, RunLastRequest, RequestIntervals, DoNotStoreLastResponseInLogFile);
+            return new ODataSourceReader(new HttpRestClient(_credentials, RequestTimeout), Logger, mapping, _endpoint, Mode, DeltaModifier, MaximumPageSize, RunLastRequest, RequestIntervals, DoNotStoreLastResponseInLogFile);
         }
 
         /// <inheritdoc />
