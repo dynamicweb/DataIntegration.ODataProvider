@@ -110,6 +110,10 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                             {
                                 primaryKeyColumnValuesForPatch.Add($"{item.Key}='{item.Value}'");
                             }
+                            else if (columnKeyType == typeof(DateTime))
+                            {
+                                primaryKeyColumnValuesForPatch.Add($"{item.Key}={GetTheDateTimeInZeroTimeZone(item.Value, false)}");
+                            }
                             else
                             {
                                 primaryKeyColumnValuesForPatch.Add($"{item.Key}={item.Value}");
@@ -232,6 +236,10 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 {
                     keyColumnValues.Add($"{keyMapping.DestinationColumn.Name} eq '{keyMapping.ConvertInputValueToOutputValue(row[keyMapping.SourceColumn?.Name] ?? null)}'");
                 }
+                else if (keyMapping.DestinationColumn.Type == typeof(DateTime))
+                {
+                    keyColumnValues.Add($"{keyMapping.DestinationColumn.Name} eq {keyMapping.ConvertInputValueToOutputValue(GetTheDateTimeInZeroTimeZone(row[keyMapping.SourceColumn?.Name], false))}");
+                }
                 else
                 {
                     keyColumnValues.Add($"{keyMapping.DestinationColumn.Name} eq {keyMapping.ConvertInputValueToOutputValue(row[keyMapping.SourceColumn?.Name] ?? null)}");
@@ -265,16 +273,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                             jsonObject.Add(columnMapping.DestinationColumn.Name, Converter.ToDecimal(columnValue));
                             break;
                         case "datetime":
-                            var dateTime = Converter.ToDateTime(columnValue);
-                            DateTime dateTimeInUtc = TimeZoneInfo.ConvertTimeToUtc(dateTime);
-                            if (dateTimeInUtc.TimeOfDay.TotalMilliseconds > 0)
-                            {
-                                jsonObject.Add(columnMapping.DestinationColumn.Name, dateTimeInUtc.ToString("yyyy-MM-ddTHH:mm:ss.fff", CultureInfo.InvariantCulture) + "z");
-                            }
-                            else
-                            {
-                                jsonObject.Add(columnMapping.DestinationColumn.Name, dateTimeInUtc.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + "z");
-                            }
+                            jsonObject.Add(columnMapping.DestinationColumn.Name, GetTheDateTimeInZeroTimeZone(columnValue, false));
                             break;
                         default:
                             jsonObject.Add(columnMapping.DestinationColumn.Name, Converter.ToString(columnValue));
@@ -283,6 +282,20 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 }
             }
             return jsonObject.ToString();
+        }
+
+        public static string GetTheDateTimeInZeroTimeZone(object dateTimeObject, bool isEdmDate)
+        {
+            var dateTime = Converter.ToDateTime(dateTimeObject);
+            DateTime dateTimeInUtc = TimeZoneInfo.ConvertTimeToUtc(dateTime);
+            if (dateTimeInUtc.TimeOfDay.TotalMilliseconds > 0 && !isEdmDate)
+            {
+                return dateTimeInUtc.ToString("yyyy-MM-ddTHH:mm:ss.fff", CultureInfo.InvariantCulture) + "z";
+            }
+            else
+            {
+                return dateTimeInUtc.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + "z";
+            }
         }
 
         public void Dispose() { }
