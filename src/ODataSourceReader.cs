@@ -244,7 +244,6 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 DateTime? lastRunDateTime = _mapping.Job.LastSuccessfulRun;
                 if (lastRunDateTime != null)
                 {
-                    DateTime dateTimeInUtc = TimeZoneInfo.ConvertTimeToUtc(lastRunDateTime.Value);
                     string dateTimeFilterName = "";
                     bool isEdmDate = false;
 
@@ -290,13 +289,14 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 
                     if (!string.IsNullOrWhiteSpace(dateTimeFilterName))
                     {
+                        var theDateTime = ODataWriter.GetTheDateTimeInZeroTimeZone(lastRunDateTime.Value.ToString(CultureInfo.InvariantCulture), isEdmDate);
                         if (isEdmDate)
                         {
-                            dateTimeFilterName += " ge " + dateTimeInUtc.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + "z";
+                            dateTimeFilterName += " ge " + theDateTime;
                         }
                         else
                         {
-                            dateTimeFilterName += " gt " + dateTimeInUtc.ToString("yyyy-MM-ddTHH:mm:ss.fff", CultureInfo.InvariantCulture) + "z";
+                            dateTimeFilterName += " gt " + theDateTime;
                         }
                         result = dateTimeFilterName;
                     }
