@@ -82,7 +82,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                     }
 
                     var jsonObject = response[0];
-                    Logger?.Info($"Received response from Endpoint = {jsonObject.ToJsonString()}");
+                    Logger?.Info($"Received response from Endpoint = {jsonObject}");
 
                     var patchJson = MapValuesToJSon(columnMappings, Row, true);
                     if (patchJson.Equals(new JsonObject().ToString()))
@@ -143,7 +143,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 
             if (awaitResponseFromEndpoint?.Result?.Status != HttpStatusCode.NoContent)
             {
-                Logger?.Info($"Received response from Endpoint = {PostBackObject?.ToJsonString()}");
+                Logger?.Info($"Received response from Endpoint = {PostBackObject}");
             }
             else if (_responseMappings.Any())
             {
