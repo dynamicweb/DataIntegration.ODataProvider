@@ -82,7 +82,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                     }
 
                     var jsonObject = response[0];
-                    Logger?.Info($"Received response from Endpoint = {jsonObject}");
+                    Logger?.Info($"Received response from Endpoint = {jsonObject.ToJsonString()}");
 
                     var patchJson = MapValuesToJSon(columnMappings, Row, true);
                     if (patchJson.Equals(new JsonObject().ToString()))
@@ -143,7 +143,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 
             if (awaitResponseFromEndpoint?.Result?.Status != HttpStatusCode.NoContent)
             {
-                Logger?.Info($"Received response from Endpoint = {PostBackObject}");
+                Logger?.Info($"Received response from Endpoint = {PostBackObject?.ToJsonString()}");
             }
             else if (_responseMappings.Any())
             {
@@ -278,7 +278,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                     }
                 }
             }
-            return jsonObject.ToString();
+            return jsonObject.ToJsonString();
         }
 
         public static string GetTheDateTimeInZeroTimeZone(object dateTimeObject, bool isEdmDate)
