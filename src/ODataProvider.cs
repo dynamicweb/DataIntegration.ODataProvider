@@ -7,6 +7,7 @@ using Dynamicweb.DataIntegration.Providers.ODataProvider.Interfaces;
 using Dynamicweb.DataIntegration.Providers.ODataProvider.Model;
 using Dynamicweb.Extensibility.AddIns;
 using Dynamicweb.Extensibility.Editors;
+using Dynamicweb.Logging;
 using Dynamicweb.Security.Licensing;
 using System;
 using System.Collections.Generic;
@@ -688,7 +689,8 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                         catch (Exception e)
                         {
                             Logger?.Log(e.ToString());
-                            throw;
+                            LogManager.System.GetLogger(LogCategory.Application, "Dataintegration").Error($"{GetType().Name} error: {e.Message} Stack: {e.StackTrace}", e);
+                            return false;
                         }
                     }
                 }
