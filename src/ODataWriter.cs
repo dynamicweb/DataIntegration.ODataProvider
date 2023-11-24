@@ -67,12 +67,8 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 var responseFromEndpoint = GetFromEndpoint<JsonObject>(url, null);
                 if (!string.IsNullOrEmpty(responseFromEndpoint?.Result?.Error))
                 {
-                    if (responseFromEndpoint.Result.Status == HttpStatusCode.Unauthorized)
-                    {
-                        throw new Exception(responseFromEndpoint.Result.Error);
-                    }
-                    Logger?.Warn($"Error Url: {url}. Response Error: {responseFromEndpoint.Result.Error}. Status response code: {responseFromEndpoint.Result.Status}");
-                    return;
+                    Logger?.Error($"Error Url: {url}. Response Error: {responseFromEndpoint.Result.Error}. Status response code: {responseFromEndpoint.Result.Status}");
+                    throw new Exception(responseFromEndpoint.Result.Error);
                 }
 
                 var response = responseFromEndpoint?.Result?.Content?.Value;
@@ -86,7 +82,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                     }
 
                     var jsonObject = response[0];
-                    Logger?.Info($"Recieved response from Endpoint = {jsonObject.ToJsonString()}");
+                    Logger?.Info($"Received response from Endpoint = {jsonObject.ToJsonString()}");
 
                     var patchJson = MapValuesToJSon(columnMappings, Row, true);
                     if (patchJson.Equals(new JsonObject().ToString()))
@@ -139,14 +135,15 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             awaitResponseFromEndpoint.Wait();
             if (!string.IsNullOrEmpty(awaitResponseFromEndpoint?.Result?.Error))
             {
-                Logger?.Warn($"Error Url: {url}. Response Error: {awaitResponseFromEndpoint.Result.Error}. Status response code: {awaitResponseFromEndpoint.Result.Status}");
+                Logger?.Error($"Error Url: {url}. Response Error: {awaitResponseFromEndpoint.Result.Error}. Status response code: {awaitResponseFromEndpoint.Result.Status}");
+                throw new Exception(awaitResponseFromEndpoint.Result.Error);
             }
 
             PostBackObject = awaitResponseFromEndpoint?.Result?.Content;
 
             if (awaitResponseFromEndpoint?.Result?.Status != HttpStatusCode.NoContent)
             {
-                Logger?.Info($"Recieved response from Endpoint = {PostBackObject?.ToJsonString()}");
+                Logger?.Info($"Received response from Endpoint = {PostBackObject?.ToJsonString()}");
             }
             else if (_responseMappings.Any())
             {
@@ -154,7 +151,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             }
             else
             {
-                Logger?.Info($"Recieved no response from Endpoint");
+                Logger?.Info($"Received no response from Endpoint");
             }
         }
 
@@ -281,7 +278,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                     }
                 }
             }
-            return jsonObject.ToString();
+            return jsonObject.ToJsonString();
         }
 
         public static string GetTheDateTimeInZeroTimeZone(object dateTimeObject, bool isEdmDate)

@@ -322,7 +322,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 }
                 else
                 {
-                    _logger?.Info("Detected many active column mappings, so will not auto add $select with all active column mappings and by that limit the data recieved from Endpoint.");
+                    _logger?.Info("Detected many active column mappings, so will not auto add $select with all active column mappings and by that limit the data received from Endpoint.");
                 }
             }
             return result;
