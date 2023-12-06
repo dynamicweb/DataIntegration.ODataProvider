@@ -24,7 +24,7 @@
 		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
 	</PropertyGroup>
 	<ItemGroup>
-		<PackageReference Include="Dynamicweb.DataIntegration" Version="10.0.13" />
+		<PackageReference Include="Dynamicweb.DataIntegration" Version="10.0.23" />
 		<PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.1.1" PrivateAssets="All" />
 	</ItemGroup>
   <ItemGroup>

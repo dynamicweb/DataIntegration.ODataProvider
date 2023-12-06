@@ -1,14 +1,5 @@
-﻿using Dynamicweb.Core;
-using Dynamicweb.DataIntegration.EndpointManagement;
-using Dynamicweb.DataIntegration.Integration;
-using Dynamicweb.DataIntegration.Integration.ERPIntegration;
-using Dynamicweb.DataIntegration.Integration.Interfaces;
-using Dynamicweb.DataIntegration.Providers.ODataProvider.Interfaces;
+﻿using Dynamicweb.DataIntegration.Providers.ODataProvider.Interfaces;
 using Dynamicweb.DataIntegration.Providers.ODataProvider.Model;
-using Dynamicweb.Extensibility.AddIns;
-using Dynamicweb.Extensibility.Editors;
-using Dynamicweb.Logging;
-using Dynamicweb.Security.Licensing;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -321,7 +312,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 {
                     if (table.Columns.Where(obj => obj.Name == item.Name).Count() == 0)
                     {
-                        table.AddColumn(new Column(item.Name, item.Type, table, item.IsPrimaryKey, item.IsNew));
+                        table.AddColumn(new Column(item.Name, item.Type, table, item.IsPrimaryKey, item.IsNew, item.ReadOnly));
                     }
                 }
             }
@@ -332,6 +323,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             string baseType = xmlReader.GetAttribute("BaseType");
             string entityName = xmlReader.GetAttribute("Name");
             List<string> primaryKeys = new List<string>();
+            Column column = null;
             while (xmlReader.Read() && !(xmlReader.NodeType == XmlNodeType.EndElement && xmlReader.Name.Equals("EntityType", StringComparison.OrdinalIgnoreCase)))
             {
                 if (xmlReader.NodeType == XmlNodeType.Element && xmlReader.Name.Equals("PropertyRef", StringComparison.OrdinalIgnoreCase))
@@ -344,7 +336,27 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                     var columnTypeString = xmlReader.GetAttribute("Type");
                     var columnType = GetColumnType(columnTypeString);
                     var isPrimaryKey = primaryKeys.Contains(columnName);
-                    table.AddColumn(new Column(columnName, columnType, table, isPrimaryKey, false));
+                    column = new Column(columnName, columnType, table, isPrimaryKey, false);
+                    table.AddColumn(column);
+                    // BC
+                    var scale = xmlReader.GetAttribute("Scale");
+                    if (scale is not null && string.Equals(scale, "Variable", StringComparison.OrdinalIgnoreCase))
+                        column.ReadOnly = true;
+                }
+                else if (xmlReader.NodeType == XmlNodeType.Element && xmlReader.Name.Equals("Annotation", StringComparison.OrdinalIgnoreCase) && column is not null)
+                {
+                    // BC & FO
+                    var term = xmlReader.GetAttribute("Term");
+                    var value = xmlReader.GetAttribute("Bool");
+                    if (!string.IsNullOrEmpty(term) && term.Contains("AllowEdit") && !string.IsNullOrEmpty(value) && !Converter.ToBoolean(value))
+                        column.ReadOnly = true;
+                }
+                else if (xmlReader.NodeType == XmlNodeType.Element && xmlReader.Name.Equals("EnumMember", StringComparison.OrdinalIgnoreCase) && column is not null)
+                {
+                    // CRM
+                    string permission = xmlReader.Value;
+                    if (!string.IsNullOrEmpty(permission) && permission.ToLower().EndsWith("permissiontype/read"))
+                        column.ReadOnly = true;
                 }
                 else if (xmlReader.Name.Equals("EntityType", StringComparison.OrdinalIgnoreCase) && xmlReader.GetAttribute("Name") != entityName)
                 {
@@ -361,7 +373,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                     {
                         if (table.Columns.Where(obj => obj.Name == item.Name).Count() == 0)
                         {
-                            table.AddColumn(new Column(item.Name, item.Type, table, item.IsPrimaryKey, item.IsNew));
+                            table.AddColumn(new Column(item.Name, item.Type, table, item.IsPrimaryKey, item.IsNew, item.ReadOnly));
                         }
                     }
                 }

@@ -251,7 +251,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 
             foreach (ColumnMapping columnMapping in columnMappings)
             {
-                if (!columnMapping.Active || (columnMapping.ScriptValueForInsert && isPatchRequest))
+                if (!columnMapping.Active || (columnMapping.ScriptValueForInsert && isPatchRequest) || (columnMapping.DestinationColumn is not null && !columnMapping.DestinationColumn.ReadOnly))
                     continue;
 
                 if (columnMapping.HasScriptWithValue || row.ContainsKey(columnMapping.SourceColumn?.Name))
