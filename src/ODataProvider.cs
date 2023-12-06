@@ -1,5 +1,14 @@
-﻿using Dynamicweb.DataIntegration.Providers.ODataProvider.Interfaces;
+﻿using Dynamicweb.Core;
+using Dynamicweb.DataIntegration.EndpointManagement;
+using Dynamicweb.DataIntegration.Integration;
+using Dynamicweb.DataIntegration.Integration.ERPIntegration;
+using Dynamicweb.DataIntegration.Integration.Interfaces;
+using Dynamicweb.DataIntegration.Providers.ODataProvider.Interfaces;
 using Dynamicweb.DataIntegration.Providers.ODataProvider.Model;
+using Dynamicweb.Extensibility.AddIns;
+using Dynamicweb.Extensibility.Editors;
+using Dynamicweb.Logging;
+using Dynamicweb.Security.Licensing;
 using System;
 using System.Collections.Generic;
 using System.IO;
