@@ -9,8 +9,8 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Net;
-using System.Threading.Tasks;
 using System.Text.Json.Nodes;
+using System.Threading.Tasks;
 
 namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 {
@@ -168,8 +168,9 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                     }
                 }
             }
-            catch
+            catch (Exception ex)
             {
+                Logger?.Error($"Error GetPostBackValue", ex);
             }
             return result;
         }

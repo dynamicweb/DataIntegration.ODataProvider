@@ -43,6 +43,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         private readonly bool _doNotStoreLastResponseInLogFile;
         private bool _requestTimedOutFromGlobalSettings;
         private readonly int _maximumCharacterLengthOfAutoAddedSelectStatement = 1250;
+        private readonly int _timeoutInMilliseconds;
 
         internal void SaveRequestResponseFile()
         {
@@ -107,6 +108,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             _nextPaginationUrlName = nextPaginationUrlName;
             _requestIntervals = requestIntervals;
             _doNotStoreLastResponseInLogFile = doNotStoreLastResponseInLogFile;
+            _timeoutInMilliseconds = GetTimeOutInMilliseconds();
             string logFileName = Scheduling.Task.MakeSafeFileName(mapping.Job.Name) + $"_{_mapping.SourceTable.Name}.log";
 
             IDictionary<string, string> headers = GetAllHeaders();
@@ -129,7 +131,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             {
                 if (readFromLastRequestResponse)
                 {
-                    _logger?.Info("Request file does not exists, now fetching from endpoint.");
+                    _logger?.Info("Last response file does not exists, now fetching data from the endpoint.");
                 }
 
                 IDictionary<string, string> parameters = new Dictionary<string, string>();
@@ -534,35 +536,20 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             {
                 _logger?.Info(loggerInfo);
                 Task task;
-                int timeoutInMilliseconds = 20 * 60 * 1000; //20 minutes
-                string globalSettingTimeout = Configuration.SystemConfiguration.Instance.GetValue("/Globalsettings/Modules/DataIntegration/Job/TimeoutInMilliseconds");
-                if (!string.IsNullOrEmpty(globalSettingTimeout))
-                {
-                    int globalSettingTimeoutAsInt = Converter.ToInt32(globalSettingTimeout);
-                    if (globalSettingTimeoutAsInt > 0)
-                    {
-                        timeoutInMilliseconds = globalSettingTimeoutAsInt;
-                        _requestTimedOutFromGlobalSettings = true;
-                    }
-                }
                 var endpointAuthentication = _endpoint.Authentication;
                 if (endpointAuthentication.IsTokenBased())
                 {
-                    string token = OAuthHelper.GetToken(_endpoint, endpointAuthentication, out Exception exception);
-                    if (exception != null)
-                    {
-                        throw exception;
-                    }
-                    task = RetryHelper.RetryOnExceptionAsync<Exception>(10, async () => { _httpRestClient.GetAsync(url, HandleStream, token, (Dictionary<string, string>)headers).Wait(new CancellationTokenSource(timeoutInMilliseconds).Token); }, _logger);
+                    string token = GetToken(_endpoint, endpointAuthentication);
+                    task = RetryHelper.RetryOnExceptionAsync<Exception>(10, async () => { _httpRestClient.GetAsync(url, HandleStream, token, (Dictionary<string, string>)headers).Wait(new CancellationTokenSource(_timeoutInMilliseconds).Token); }, _logger);
                 }
                 else
                 {
-                    task = RetryHelper.RetryOnExceptionAsync<Exception>(10, async () => { _httpRestClient.GetAsync(url, HandleStream, endpointAuthentication, (Dictionary<string, string>)headers).Wait(new CancellationTokenSource(timeoutInMilliseconds).Token); }, _logger);
+                    task = RetryHelper.RetryOnExceptionAsync<Exception>(10, async () => { _httpRestClient.GetAsync(url, HandleStream, endpointAuthentication, (Dictionary<string, string>)headers).Wait(new CancellationTokenSource(_timeoutInMilliseconds).Token); }, _logger);
                 }
                 if (task.IsCanceled)
                 {
                     string aditionalErrorMSG = _requestTimedOutFromGlobalSettings ? "(To change go to global settings and look for TimeoutInMilliseconds)" : "";
-                    throw new TimeoutException($"Request has timed out with a wait of {timeoutInMilliseconds} in milliseconds {aditionalErrorMSG}");
+                    throw new TimeoutException($"Request has timed out with a wait of {_timeoutInMilliseconds} in milliseconds {aditionalErrorMSG}");
                 }
                 task.Wait();
                 _logger?.Info("Data received, now processing data.");
@@ -653,31 +640,64 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             {
                 checkUrl += "?$top=1";
             }
+            _logger?.Info($"Checking if endpoint: '{_endpoint.Name}' is ready for use on URL: '{checkUrl}'");
             bool result = false;
             Task task;
             var endpointAuthentication = _endpoint.Authentication;
             if (endpointAuthentication.IsTokenBased())
             {
-                string token = OAuthHelper.GetToken(_endpoint, endpointAuthentication, out Exception exception);
-                if (exception != null)
-                {
-                    throw exception;
-                }
-                task = _httpRestClient.GetAsync(checkUrl, HandleResponse, token);
+                string token = GetToken(_endpoint, endpointAuthentication);
+                task = RetryHelper.RetryOnExceptionAsync<Exception>(10, async () => { _httpRestClient.GetAsync(checkUrl, HandleResponse, token, (Dictionary<string, string>)GetAllHeaders()).Wait(new CancellationTokenSource(_timeoutInMilliseconds).Token); }, _logger);
             }
             else
             {
-                task = _httpRestClient.GetAsync(checkUrl, HandleResponse, endpointAuthentication);
+                task = RetryHelper.RetryOnExceptionAsync<Exception>(10, async () => { _httpRestClient.GetAsync(checkUrl, HandleResponse, endpointAuthentication, (Dictionary<string, string>)GetAllHeaders()).Wait(new CancellationTokenSource(_timeoutInMilliseconds).Token); }, _logger);
+            }
+            if (task.IsCanceled)
+            {
+                string aditionalErrorMSG = _requestTimedOutFromGlobalSettings ? "(To change go to global settings and look for TimeoutInMilliseconds)" : "";
+                throw new TimeoutException($"Request has timed out with a wait of {_timeoutInMilliseconds} in milliseconds {aditionalErrorMSG}");
             }
             task.Wait();
+
             void HandleResponse(Stream responseStream, HttpStatusCode responseStatusCode, Dictionary<string, string> responseHeaders)
             {
                 if (responseStatusCode == HttpStatusCode.OK)
                 {
                     result = true;
                 }
+                else
+                {
+                    _logger?.Info($"{checkUrl} returned the HttpStatusCode of: '{responseStatusCode}' ");
+                }
             }
             return result;
+        }
+
+        private string GetToken(Endpoint endpoint, EndpointAuthentication endpointAuthentication)
+        {
+            string token = OAuthHelper.GetToken(endpoint, endpointAuthentication, out Exception exception);
+            if (exception != null)
+            {
+                throw exception;
+            }
+            return token;
+        }
+
+        private int GetTimeOutInMilliseconds()
+        {
+            int timeoutInMilliseconds = 20 * 60 * 1000; //20 minutes
+            string globalSettingTimeout = Configuration.SystemConfiguration.Instance.GetValue("/Globalsettings/Modules/DataIntegration/Job/TimeoutInMilliseconds");
+            if (!string.IsNullOrEmpty(globalSettingTimeout))
+            {
+                int globalSettingTimeoutAsInt = Converter.ToInt32(globalSettingTimeout);
+                if (globalSettingTimeoutAsInt > 0)
+                {
+                    timeoutInMilliseconds = globalSettingTimeoutAsInt;
+                    _requestTimedOutFromGlobalSettings = true;
+                }
+            }
+            return timeoutInMilliseconds;
         }
 
         private void FinishJob()
