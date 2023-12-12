@@ -709,7 +709,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                         }
                         catch (Exception e)
                         {
-                            Logger?.Log(e.ToString());
+                            Logger?.Error(e.ToString());
                             LogManager.System.GetLogger(LogCategory.Application, "Dataintegration").Error($"{GetType().Name} error: {e.Message} Stack: {e.StackTrace}", e);
                             return false;
                         }
