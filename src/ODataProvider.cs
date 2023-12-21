@@ -115,6 +115,11 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             set => _endpoint = _endpointService.GetEndpointById(Convert.ToInt32(value));
         }
 
+        [AddInParameter("Continue on error")]
+        [AddInParameterEditor(typeof(YesNoParameterEditor), "Tooltip=Use this when the job should continue when endpoint returns an error.")]
+        [AddInParameterGroup("Destination")]
+        public bool ContinueOnError { get; set; }
+
         #endregion
 
         private string GetMetadataURL()
@@ -499,6 +504,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         {
             ODataProvider newProvider = (ODataProvider)destination;
             DestinationEndpointId = newProvider.DestinationEndpointId;
+            ContinueOnError = newProvider.ContinueOnError;
         }
 
         /// <inheritdoc />
@@ -580,6 +586,12 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                             DestinationEndpointId = node.FirstChild.Value;
                         }
                         break;
+                    case "Continueonerror":
+                        if (node.HasChildNodes)
+                        {
+                            ContinueOnError = node.FirstChild.Value == "True";
+                        }
+                        break;
                 }
             }
         }
@@ -598,6 +610,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             root.Add(CreateParameterNode(GetType(), "Do not store last response in log file", DoNotStoreLastResponseInLogFile.ToString()));
             root.Add(CreateParameterNode(GetType(), "Predefined endpoint", EndpointId));
             root.Add(CreateParameterNode(GetType(), "Destination endpoint", DestinationEndpointId));
+            root.Add(CreateParameterNode(GetType(), "Continue on error", ContinueOnError.ToString()));
             return document.ToString();
         }
 
@@ -613,6 +626,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             textWriter.WriteElementString("Donotstorelastresponseinlogfile", DoNotStoreLastResponseInLogFile.ToString());
             textWriter.WriteElementString("Predefinedendpoint", EndpointId);
             textWriter.WriteElementString("Destinationendpoint", DestinationEndpointId);
+            textWriter.WriteElementString("Continueonerror", ContinueOnError.ToString());
             GetSchema().SaveAsXml(textWriter);
         }
 
@@ -660,7 +674,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
 
                 Logger?.Log($"Begin synchronizing '{mapping.SourceTable.Name}' to '{mapping.DestinationTable.Name}'.");
 
-                using (var writer = new ODataWriter(Logger, mapping, _endpoint, _credentials))
+                using (var writer = new ODataWriter(Logger, mapping, _endpoint, _credentials, ContinueOnError))
                 {
                     using (ISourceReader sourceReader = mapping.Source.GetReader(mapping))
                     {

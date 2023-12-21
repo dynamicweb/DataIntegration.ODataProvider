@@ -23,10 +23,11 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         public readonly EndpointAuthenticationService EndpointAuthenticationService;
         private Dictionary<string, Type> _destinationPrimaryKeyColumns;
         private readonly ColumnMappingCollection _responseMappings;
+        private bool _continueOnError;
         public Mapping Mapping { get; }
         internal JsonObject PostBackObject { get; set; }
 
-        internal ODataWriter(ILogger logger, Mapping mapping, Endpoint endpoint, ICredentials credentials)
+        internal ODataWriter(ILogger logger, Mapping mapping, Endpoint endpoint, ICredentials credentials, bool continueOnError)
         {
             Logger = logger;
             Endpoint = endpoint;
@@ -37,6 +38,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             var originalDestinationMappingTable = originalDestinationTables.FirstOrDefault(obj => obj.Name == Mapping.DestinationTable.Name);
             _destinationPrimaryKeyColumns = originalDestinationMappingTable?.Columns.Where(obj => obj.IsPrimaryKey)?.ToDictionary(obj => obj.Name, obj => obj.Type) ?? new Dictionary<string, Type>();
             _responseMappings = Mapping.GetResponseColumnMappings();
+            _continueOnError = continueOnError;
         }
 
         public void Write(Dictionary<string, object> Row)
@@ -68,7 +70,10 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 if (!string.IsNullOrEmpty(responseFromEndpoint?.Result?.Error))
                 {
                     Logger?.Error($"Error Url: {url}. Response Error: {responseFromEndpoint.Result.Error}. Status response code: {responseFromEndpoint.Result.Status}");
-                    throw new Exception(responseFromEndpoint.Result.Error);
+                    if (!_continueOnError)
+                    {
+                        throw new Exception(responseFromEndpoint.Result.Error);
+                    }
                 }
 
                 var response = responseFromEndpoint?.Result?.Content?.Value;
@@ -136,7 +141,10 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             if (!string.IsNullOrEmpty(awaitResponseFromEndpoint?.Result?.Error))
             {
                 Logger?.Error($"Error Url: {url}. Response Error: {awaitResponseFromEndpoint.Result.Error}. Status response code: {awaitResponseFromEndpoint.Result.Status}");
-                throw new Exception(awaitResponseFromEndpoint.Result.Error);
+                if (!_continueOnError)
+                {
+                    throw new Exception(awaitResponseFromEndpoint.Result.Error);
+                }
             }
 
             PostBackObject = awaitResponseFromEndpoint?.Result?.Content;
