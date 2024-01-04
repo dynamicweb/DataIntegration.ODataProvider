@@ -352,10 +352,6 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                     var isPrimaryKey = primaryKeys.Contains(columnName);
                     column = new Column(columnName, columnType, table, isPrimaryKey, false);
                     table.AddColumn(column);
-                    // BC
-                    var scale = xmlReader.GetAttribute("Scale");
-                    if (scale is not null && string.Equals(scale, "Variable", StringComparison.OrdinalIgnoreCase))
-                        column.ReadOnly = true;
                 }
                 else if (xmlReader.NodeType == XmlNodeType.Element && xmlReader.Name.Equals("Annotation", StringComparison.OrdinalIgnoreCase) && column is not null)
                 {
