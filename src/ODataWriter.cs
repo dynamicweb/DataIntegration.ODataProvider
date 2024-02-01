@@ -26,6 +26,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
         private bool _continueOnError;
         public Mapping Mapping { get; }
         internal JsonObject PostBackObject { get; set; }
+        private readonly ColumnMappingCollection _columnMappings;
 
         internal ODataWriter(ILogger logger, Mapping mapping, Endpoint endpoint, ICredentials credentials, bool continueOnError)
         {
@@ -39,6 +40,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             _destinationPrimaryKeyColumns = originalDestinationMappingTable?.Columns.Where(obj => obj.IsPrimaryKey)?.ToDictionary(obj => obj.Name, obj => obj.Type) ?? new Dictionary<string, Type>();
             _responseMappings = Mapping.GetResponseColumnMappings();
             _continueOnError = continueOnError;
+            _columnMappings = Mapping.GetColumnMappings();
         }
 
         public void Write(Dictionary<string, object> Row)
@@ -46,8 +48,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             string endpointURL = Endpoint.Url;
             string url = ODataSourceReader.GetEndpointURL(endpointURL, Mapping.DestinationTable.Name, "");
 
-            var columnMappings = Mapping.GetColumnMappings();
-            var keyColumnValuesForFilter = GetKeyColumnValuesForFilter(Row, columnMappings);
+            var keyColumnValuesForFilter = GetKeyColumnValuesForFilter(Row);
 
             Task<RestResponse<JsonObject>> awaitResponseFromEndpoint;
             if (keyColumnValuesForFilter.Any())
@@ -89,7 +90,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                     var jsonObject = response[0];
                     Logger?.Info($"Received response from Endpoint = {jsonObject.ToJsonString()}");
 
-                    var patchJson = MapValuesToJSon(columnMappings, Row, true);
+                    var patchJson = MapValuesToJSon(Row, true);
                     if (patchJson.Equals(new JsonObject().ToString()))
                     {
                         Logger?.Info($"Skipped PATCH as no active column mappings is added for always apply.");
@@ -130,12 +131,12 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 }
                 else
                 {
-                    awaitResponseFromEndpoint = PostToEndpoint<JsonObject>(url, MapValuesToJSon(columnMappings, Row, false), null, false);
+                    awaitResponseFromEndpoint = PostToEndpoint<JsonObject>(url, MapValuesToJSon(Row, false), null, false);
                 }
             }
             else
             {
-                awaitResponseFromEndpoint = PostToEndpoint<JsonObject>(url, MapValuesToJSon(columnMappings, Row, false), null, false);
+                awaitResponseFromEndpoint = PostToEndpoint<JsonObject>(url, MapValuesToJSon(Row, false), null, false);
             }
             awaitResponseFromEndpoint.Wait();
             if (!string.IsNullOrEmpty(awaitResponseFromEndpoint?.Result?.Error))
@@ -233,10 +234,10 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             return awaitResponseFromEndpoint;
         }
 
-        internal List<string> GetKeyColumnValuesForFilter(Dictionary<string, object> row, ColumnMappingCollection columnMappings)
+        internal List<string> GetKeyColumnValuesForFilter(Dictionary<string, object> row)
         {
             var keyColumnValues = new List<string>();
-            foreach (var keyMapping in columnMappings.Where(cm => cm != null && cm.IsKey))
+            foreach (var keyMapping in _columnMappings.Where(cm => cm != null && cm.IsKey))
             {
                 if (keyMapping.DestinationColumn.Type == typeof(string))
                 {
@@ -254,11 +255,11 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             return keyColumnValues;
         }
 
-        internal string MapValuesToJSon(ColumnMappingCollection columnMappings, Dictionary<string, object> row, bool isPatchRequest)
+        internal string MapValuesToJSon(Dictionary<string, object> row, bool isPatchRequest)
         {
             var jsonObject = new JsonObject();
 
-            foreach (ColumnMapping columnMapping in columnMappings)
+            foreach (ColumnMapping columnMapping in _columnMappings)
             {
                 if (!columnMapping.Active || (columnMapping.ScriptValueForInsert && isPatchRequest) || (columnMapping.DestinationColumn is not null && columnMapping.DestinationColumn.ReadOnly))
                     continue;

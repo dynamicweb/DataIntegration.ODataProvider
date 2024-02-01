@@ -719,8 +719,12 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                         }
                         catch (Exception e)
                         {
-                            Logger?.Error(e.ToString());
-                            LogManager.System.GetLogger(LogCategory.Application, "Dataintegration").Error($"{GetType().Name} error: {e.Message} Stack: {e.StackTrace}", e);
+                            string msg = e.Message;
+                            string stackTrace = e.StackTrace;
+
+                            Logger?.Log(e.ToString());
+                            Logger?.Error($"Error: {msg.Replace(System.Environment.NewLine, " ")} Stack: {stackTrace.Replace(System.Environment.NewLine, " ")}", e);
+                            LogManager.System.GetLogger(LogCategory.Application, "Dataintegration").Error($"{GetType().Name} error: {msg} Stack: {stackTrace}", e);
                             return false;
                         }
                     }
