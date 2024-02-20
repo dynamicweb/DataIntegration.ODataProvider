@@ -3,6 +3,8 @@ using Dynamicweb.DataIntegration.EndpointManagement;
 using Dynamicweb.DataIntegration.Integration;
 using Dynamicweb.DataIntegration.Integration.Interfaces;
 using Dynamicweb.DataIntegration.Providers.ODataProvider.Model;
+using Dynamicweb.Ecommerce;
+using Dynamicweb.Ecommerce.Orders;
 using Dynamicweb.Logging;
 using System;
 using System.Collections.Generic;
@@ -70,7 +72,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
                 var responseFromEndpoint = GetFromEndpoint<JsonObject>(url, null);
                 if (!string.IsNullOrEmpty(responseFromEndpoint?.Result?.Error))
                 {
-                    Logger?.Error($"Error Url: {url}. Response Error: {responseFromEndpoint.Result.Error}. Status response code: {responseFromEndpoint.Result.Status}");
+                    LogError(Row, url, responseFromEndpoint.Result);
                     if (!_continueOnError)
                     {
                         throw new Exception(responseFromEndpoint.Result.Error);
@@ -161,6 +163,28 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider
             else
             {
                 Logger?.Info($"Received no response from Endpoint");
+            }
+        }
+
+        private void LogError(Dictionary<string, object> row, string url, RestResponse<ResponseFromEndpoint<JsonObject>> response)
+        {
+            Logger?.Error($"Error Url: {url}. Response Error: {response.Error}. Status response code: {response.Status}");
+
+            if (row is not null && Mapping?.SourceTable is not null && string.Equals(Mapping.SourceTable.Name, "EcomOrders", StringComparison.OrdinalIgnoreCase))
+            {
+                var key = row.Keys.FirstOrDefault(k => string.Equals(k, "OrderId", StringComparison.OrdinalIgnoreCase));
+                if (!string.IsNullOrEmpty(key) && row[key] is not null)
+                {
+                    string id = row[key].ToString();
+                    if (!string.IsNullOrEmpty(id))
+                    {
+                        var order = Services.Orders.GetById(id);
+                        if (order is not null)
+                        {
+                            Services.OrderDebuggingInfos.Save(order, $"{nameof(ODataProvider)}: Communication failed with error: {response.Error}", nameof(ODataProvider), DebuggingInfoType.Undefined);
+                        }
+                    }
+                }
             }
         }
 

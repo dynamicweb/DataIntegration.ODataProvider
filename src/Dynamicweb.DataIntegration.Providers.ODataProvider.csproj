@@ -25,6 +25,7 @@
 	</PropertyGroup>
 	<ItemGroup>
 		<PackageReference Include="Dynamicweb.DataIntegration" Version="10.0.24" />
+		<PackageReference Include="Dynamicweb.Ecommerce" Version="10.0.34" />
 		<PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.1.1" PrivateAssets="All" />
 	</ItemGroup>
   <ItemGroup>
