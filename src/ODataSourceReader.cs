@@ -124,7 +124,22 @@ internal class ODataSourceReader : ISourceReader
         }
         else if (readFromLastRequestResponse && File.Exists(_requestResponseMapPath.CombinePaths(logFileName)))
         {
-            _responseResult = _totalResponseResult = JsonSerializer.Deserialize<List<Dictionary<string, object>>>(File.ReadAllText(_requestResponseMapPath.CombinePaths(logFileName)));
+            var previusMapping = _mapping.Job.Mappings.Where(mapping => (mapping.SourceTable?.Name ?? "").Equals(_mapping.SourceTable?.Name ?? "", StringComparison.OrdinalIgnoreCase) && mapping.GetId() < _mapping.GetId())?.OrderByDescending(obj => obj.GetId())?.FirstOrDefault();
+            if (previusMapping != null)
+            {
+                var previusMappingFilters = GetFilterAsParameters(previusMapping);
+                var currentMappingFilters = GetFilterAsParameters(_mapping);
+                if (previusMappingFilters.Except(currentMappingFilters, StringComparer.OrdinalIgnoreCase).Concat(currentMappingFilters.Except(previusMappingFilters, StringComparer.OrdinalIgnoreCase)).Any())
+                {
+                    CallEndpoing(headers, readFromLastRequestResponse);
+                    return;
+                }
+            }
+
+            List<Dictionary<string, JsonElement>> deserializedJsons = JsonSerializer.Deserialize<List<Dictionary<string, JsonElement>>>(File.ReadAllText(_requestResponseMapPath.CombinePaths(logFileName)));
+
+            _totalResponseResult = deserializedJsons.Select(dict => dict.ToDictionary(obj => obj.Key, obj => obj.Value.ValueKind == JsonValueKind.String ? (object)obj.Value.GetString() : (object)obj.Value.GetRawText())).ToList();
+            _responseResult = _totalResponseResult;
             _responseEnumerator = _responseResult.GetEnumerator();
         }
         else
@@ -134,45 +149,50 @@ internal class ODataSourceReader : ISourceReader
                 _logger?.Info("Last response file does not exists, now fetching data from the endpoint.");
             }
 
-            IDictionary<string, string> parameters = new Dictionary<string, string>();
+            CallEndpoing(headers, readFromLastRequestResponse);
+        }
+    }
 
-            if (_mode != null && _mode.Equals("First page", StringComparison.OrdinalIgnoreCase) && _maximumPageSize > 0)
-            {
-                parameters.Add("$top", _maximumPageSize.ToString());
-            }
+    internal void CallEndpoing(IDictionary<string, string> headers, bool readFromLastRequestResponse)
+    {
+        IDictionary<string, string> parameters = new Dictionary<string, string>();
 
-            var selectAsParameters = GetSelectAsParameters();
-            var modeAsParemters = GetModeAsParameters();
-            var filterAsParameters = GetFilterAsParameters();
-            if (!string.IsNullOrEmpty(modeAsParemters))
-            {
-                filterAsParameters.Add(modeAsParemters);
-            }
+        if (_mode != null && _mode.Equals("First page", StringComparison.OrdinalIgnoreCase) && _maximumPageSize > 0)
+        {
+            parameters.Add("$top", _maximumPageSize.ToString());
+        }
 
-            if (selectAsParameters.Any())
-            {
-                parameters.Add("$select", string.Join(",", selectAsParameters));
-            }
+        var selectAsParameters = GetSelectAsParameters(readFromLastRequestResponse);
+        var modeAsParemters = GetModeAsParameters();
+        var filterAsParameters = GetFilterAsParameters(_mapping);
+        if (!string.IsNullOrEmpty(modeAsParemters))
+        {
+            filterAsParameters.Add(modeAsParemters);
+        }
 
-            if (filterAsParameters.Any())
-            {
-                parameters.Add("$filter", string.Join(" and ", filterAsParameters));
-            }
+        if (selectAsParameters.Any())
+        {
+            parameters.Add("$select", string.Join(",", selectAsParameters));
+        }
 
-            if (_endpoint.Parameters != null)
+        if (filterAsParameters.Any())
+        {
+            parameters.Add("$filter", string.Join(" and ", filterAsParameters));
+        }
+
+        if (_endpoint.Parameters != null)
+        {
+            foreach (var parameter in _endpoint.Parameters)
             {
-                foreach (var parameter in _endpoint.Parameters)
+                if (!parameters.ContainsKey(parameter.Key))
                 {
-                    if (!parameters.ContainsKey(parameter.Key))
-                    {
-                        parameters.Add(parameter.Key, parameter.Value);
-                    }
+                    parameters.Add(parameter.Key, parameter.Value);
                 }
             }
-
-            string url = GetEndpointURL(_endpoint.Url, _mapping.SourceTable.Name, "", parameters);
-            HandleRequest(url, $"Starting reading data from endpoint: '{_endpoint.Name}', using URL: '{url}'", headers);
         }
+
+        string url = GetEndpointURL(_endpoint.Url, _mapping.SourceTable.Name, "", parameters);
+        HandleRequest(url, $"Starting reading data from endpoint: '{_endpoint.Name}', using URL: '{url}'", headers);
     }
 
     internal IDictionary<string, string> GetAllHeaders()
@@ -307,7 +327,7 @@ internal class ODataSourceReader : ISourceReader
         return result;
     }
 
-    private List<string> GetSelectAsParameters()
+    private List<string> GetSelectAsParameters(bool readFromLastRequestResponse)
     {
         List<string> result = new();
         var activeColumnMappings = _mapping.GetColumnMappings().Where(obj => obj.Active).ToList();
@@ -315,14 +335,19 @@ internal class ODataSourceReader : ISourceReader
         {
             var selectColumnNames = activeColumnMappings.Where(obj => obj.SourceColumn != null)?.Select(obj => obj.SourceColumn.Name).ToList();
 
-            var theJobsTableMappingsWithSameSourceTable = _mapping.Job.Mappings.Where(obj => obj.SourceTable.Name.Equals(_mapping.SourceTable.Name, StringComparison.OrdinalIgnoreCase)).ToList();
-            if (theJobsTableMappingsWithSameSourceTable.Any())
+            if (readFromLastRequestResponse)
             {
-                foreach (var tableMapping in theJobsTableMappingsWithSameSourceTable)
+                var theJobsTableMappingsWithSameSourceTable = _mapping.Job.Mappings.Where(obj => obj.SourceTable.Name.Equals(_mapping.SourceTable.Name, StringComparison.OrdinalIgnoreCase)).ToList();
+                if (theJobsTableMappingsWithSameSourceTable.Any())
                 {
-                    selectColumnNames.AddRange(tableMapping.GetColumnMappings().Where(obj => obj.Active && obj.SourceColumn != null && !selectColumnNames.Contains(obj.SourceColumn.Name))?.Select(obj => obj.SourceColumn.Name).ToList());
+                    foreach (var tableMapping in theJobsTableMappingsWithSameSourceTable)
+                    {
+                        selectColumnNames.AddRange(tableMapping.GetColumnMappings().Where(obj => obj.Active && obj.SourceColumn != null && !selectColumnNames.Contains(obj.SourceColumn.Name))?.Select(obj => obj.SourceColumn.Name).ToList());
+                    }
                 }
             }
+
+            selectColumnNames = selectColumnNames.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
 
             //max limit for url-length is roughly 2048 characters, so we skip adding if there is more than 1250 in the parameters.
             var selectColumnNamesJoined = string.Join(",", selectColumnNames);
@@ -339,10 +364,10 @@ internal class ODataSourceReader : ISourceReader
         return result;
     }
 
-    private List<string> GetFilterAsParameters()
+    private List<string> GetFilterAsParameters(Mapping mapping)
     {
         List<string> result = new();
-        var mappingConditionals = _mapping.Conditionals.ToList();
+        var mappingConditionals = mapping.Conditionals.ToList();
         if (mappingConditionals.Any())
         {
             foreach (var item in mappingConditionals)
