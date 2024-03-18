@@ -3,69 +3,68 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 
-namespace Dynamicweb.DataIntegration.Providers.ODataProvider.Model
+namespace Dynamicweb.DataIntegration.Providers.ODataProvider.Model;
+
+public static class RetryHelper
 {
-    public static class RetryHelper
+    public static async Task RetryOnExceptionAsync(int maxRetryAttempts, Func<Task> operation, ILogger _logger)
     {
-        public static async Task RetryOnExceptionAsync(int maxRetryAttempts, Func<Task> operation, ILogger _logger)
-        {
-            await RetryOnExceptionAsync<Exception>(maxRetryAttempts, operation, _logger);
-        }
+        await RetryOnExceptionAsync<Exception>(maxRetryAttempts, operation, _logger);
+    }
 
-        public static async Task RetryOnExceptionAsync<TException>(int maxRetryAttempts, Func<Task> operation, ILogger _logger) where TException : Exception
+    public static async Task RetryOnExceptionAsync<TException>(int maxRetryAttempts, Func<Task> operation, ILogger _logger) where TException : Exception
+    {
+        if (maxRetryAttempts <= 0)
         {
-            if (maxRetryAttempts <= 0)
+            throw new ArgumentOutOfRangeException(nameof(maxRetryAttempts));
+        }
+        var retryattempts = 0;
+        do
+        {
+            try
             {
-                throw new ArgumentOutOfRangeException(nameof(maxRetryAttempts));
+                retryattempts++;
+                await operation();
+                break;
             }
-            var retryattempts = 0;
-            do
+            catch (TException ex)
             {
-                try
+                if (retryattempts == maxRetryAttempts)
                 {
-                    retryattempts++;
-                    await operation();
-                    break;
+                    _logger?.Error($"After {maxRetryAttempts} attempts, and no response", ex);
                 }
-                catch (TException ex)
-                {
-                    if (retryattempts == maxRetryAttempts)
-                    {
-                        _logger?.Error($"After {maxRetryAttempts} attempts, and no response", ex);
-                    }
-                    int delay = IncreasingDelayInSeconds(retryattempts);
-                    _logger?.Log($"Attempt {retryattempts} of {maxRetryAttempts} failed. New retry after {delay} seconds.");
-                    await CreateRetryDelayForException(maxRetryAttempts, retryattempts, delay);
-                }
-            } while (true);
-        }
-
-        private static Task CreateRetryDelayForException(int maxRetryAttempts, int attempts, int delay)
-        {
-            return Task.Delay(delay);
-        }
-
-        internal static int[] DelayPerAttemptInSeconds =
-        {
-            (int) TimeSpan.FromSeconds(5).TotalSeconds,
-            (int) TimeSpan.FromSeconds(15).TotalSeconds,
-            (int) TimeSpan.FromSeconds(30).TotalSeconds,
-            (int) TimeSpan.FromSeconds(45).TotalSeconds,
-            (int) TimeSpan.FromMinutes(1).TotalSeconds,
-            (int) TimeSpan.FromMinutes(3).TotalSeconds,
-            (int) TimeSpan.FromMinutes(5).TotalSeconds,
-            (int) TimeSpan.FromMinutes(10).TotalSeconds,
-            (int) TimeSpan.FromMinutes(15).TotalSeconds,
-            (int) TimeSpan.FromMinutes(30).TotalSeconds
-        };
-
-        static int IncreasingDelayInSeconds(int failedAttempts)
-        {
-            if (failedAttempts <= 0)
-            {
-                throw new ArgumentOutOfRangeException();
+                int delay = IncreasingDelayInSeconds(retryattempts);
+                _logger?.Log($"Attempt {retryattempts} of {maxRetryAttempts} failed. New retry after {delay} seconds.");
+                await CreateRetryDelayForException(maxRetryAttempts, retryattempts, delay);
             }
-            return failedAttempts >= DelayPerAttemptInSeconds.Length ? DelayPerAttemptInSeconds.Last() : DelayPerAttemptInSeconds[failedAttempts];
+        } while (true);
+    }
+
+    private static Task CreateRetryDelayForException(int maxRetryAttempts, int attempts, int delay)
+    {
+        return Task.Delay(delay);
+    }
+
+    internal static int[] DelayPerAttemptInSeconds =
+    {
+        (int) TimeSpan.FromSeconds(5).TotalSeconds,
+        (int) TimeSpan.FromSeconds(15).TotalSeconds,
+        (int) TimeSpan.FromSeconds(30).TotalSeconds,
+        (int) TimeSpan.FromSeconds(45).TotalSeconds,
+        (int) TimeSpan.FromMinutes(1).TotalSeconds,
+        (int) TimeSpan.FromMinutes(3).TotalSeconds,
+        (int) TimeSpan.FromMinutes(5).TotalSeconds,
+        (int) TimeSpan.FromMinutes(10).TotalSeconds,
+        (int) TimeSpan.FromMinutes(15).TotalSeconds,
+        (int) TimeSpan.FromMinutes(30).TotalSeconds
+    };
+
+    static int IncreasingDelayInSeconds(int failedAttempts)
+    {
+        if (failedAttempts <= 0)
+        {
+            throw new ArgumentOutOfRangeException();
         }
+        return failedAttempts >= DelayPerAttemptInSeconds.Length ? DelayPerAttemptInSeconds.Last() : DelayPerAttemptInSeconds[failedAttempts];
     }
 }
