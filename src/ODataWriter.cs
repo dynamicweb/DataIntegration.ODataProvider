@@ -8,6 +8,7 @@ using Dynamicweb.Ecommerce.Orders;
 using Dynamicweb.Logging;
 using System;
 using System.Collections.Generic;
+using System.Data.SqlTypes;
 using System.Globalization;
 using System.Linq;
 using System.Net;
@@ -269,7 +270,7 @@ internal class ODataWriter : IDisposable, IDestinationWriter
             }
             else if (keyMapping.DestinationColumn.Type == typeof(DateTime))
             {
-                keyColumnValues.Add($"{keyMapping.DestinationColumn.Name} eq {keyMapping.ConvertInputValueToOutputValue(GetTheDateTimeInZeroTimeZone(row[keyMapping.SourceColumn?.Name], false))}");
+                keyColumnValues.Add($"{keyMapping.DestinationColumn.Name} eq {GetTheDateTimeInZeroTimeZone(keyMapping.ConvertInputValueToOutputValue(row[keyMapping.SourceColumn?.Name]), false)}");
             }
             else
             {
@@ -318,14 +319,25 @@ internal class ODataWriter : IDisposable, IDestinationWriter
     public static string GetTheDateTimeInZeroTimeZone(object dateTimeObject, bool isEdmDate)
     {
         var dateTime = Converter.ToDateTime(dateTimeObject);
-        DateTime dateTimeInUtc = TimeZoneInfo.ConvertTimeToUtc(dateTime);
+        DateTime dateTimeInUtc;
+        if (SqlDateTime.MinValue.Value == dateTime || DateTime.MinValue == dateTime)
+        {
+            return null;
+        }
+        else if (SqlDateTime.MaxValue.Value == dateTime || DateTime.MaxValue == dateTime)
+        {
+            return DateTime.MaxValue.ToString("yyyy-MM-dd");
+        }
+
+        dateTimeInUtc = TimeZoneInfo.ConvertTimeToUtc(dateTime);
+
         if (dateTimeInUtc.TimeOfDay.TotalMilliseconds > 0 && !isEdmDate)
         {
             return dateTimeInUtc.ToString("yyyy-MM-ddTHH:mm:ss.fff", CultureInfo.InvariantCulture) + "z";
         }
         else
         {
-            return dateTimeInUtc.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + "z";
+            return dateTimeInUtc.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         }
     }
 
