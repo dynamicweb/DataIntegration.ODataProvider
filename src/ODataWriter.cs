@@ -337,7 +337,7 @@ internal class ODataWriter : IDisposable, IDestinationWriter
         }
         else
         {
-            return dateTimeInUtc.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture) + "z";
+            return dateTimeInUtc.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
         }
     }
 
