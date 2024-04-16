@@ -322,7 +322,7 @@ internal class ODataWriter : IDisposable, IDestinationWriter
         DateTime dateTimeInUtc;
         if (SqlDateTime.MinValue.Value == dateTime || DateTime.MinValue == dateTime)
         {
-            return DateTime.MinValue.ToString("yyyy-MM-dd");
+            return null;
         }
         else if (SqlDateTime.MaxValue.Value == dateTime || DateTime.MaxValue == dateTime)
         {
