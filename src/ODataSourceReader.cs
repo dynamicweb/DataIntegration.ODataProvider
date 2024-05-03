@@ -660,7 +660,7 @@ internal class ODataSourceReader : ISourceReader
         string checkUrl = url;
         if (url.Contains("?"))
         {
-            bool urlContainsTop = url.Contains("&$top=", StringComparison.OrdinalIgnoreCase);
+            bool urlContainsTop = url.Contains("$top=", StringComparison.OrdinalIgnoreCase);
             if (new Uri(url).Query.Any() && !urlContainsTop)
             {
                 checkUrl += "&$top=1";
