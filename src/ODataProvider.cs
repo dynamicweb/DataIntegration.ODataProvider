@@ -453,7 +453,7 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
         {
             return "Credentials not set for endpoint, please add credentials before continue.";
         }
-        var endpointStatusCode = GetEndpointResponse(_endpoint.Url, out string _endpointResponse, out Exception exception);
+        var endpointStatusCode = GetEndpointResponse(ODataSourceReader.GetEndpointUrlWithTop(_endpoint.Url), out string _endpointResponse, out Exception exception);
         if (exception != null)
         {
             return $"{exception.Message}";
@@ -480,7 +480,7 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
         {
             return "Credentials not set for endpoint, please add credentials before continue.";
         }
-        var endpointStatusCode = GetEndpointResponse(_endpoint.Url, out string _endpointResponse, out Exception exception);
+        var endpointStatusCode = GetEndpointResponse(ODataSourceReader.GetEndpointUrlWithTop(_endpoint.Url), out string _endpointResponse, out Exception exception);
         if (exception != null)
         {
             return $"{exception.Message}";
@@ -827,7 +827,7 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
     private bool IsCRMEndpoint(string url)
     {
         bool result = false;
-        HttpStatusCode response = GetEndpointResponse(url, out string _endpointResponse, out _);
+        HttpStatusCode response = GetEndpointResponse(ODataSourceReader.GetEndpointUrlWithTop(url), out string _endpointResponse, out _);
         if (new HttpResponseMessage(response).IsSuccessStatusCode && !string.IsNullOrEmpty(_endpointResponse))
         {
             if (_endpointResponse.Contains("<title>Microsoft Dynamics 365</title>", StringComparison.OrdinalIgnoreCase))
