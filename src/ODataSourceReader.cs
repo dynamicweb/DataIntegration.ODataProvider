@@ -655,25 +655,30 @@ internal class ODataSourceReader : ISourceReader
         }
     }
 
-    private bool CheckIfEndpointIsReadyForUse(string url)
+    internal static string GetEndpointUrlWithTop(string url)
     {
-        string checkUrl = url;
-        if (url.Contains("?"))
+        if (url.Contains('?'))
         {
             bool urlContainsTop = url.Contains("$top=", StringComparison.OrdinalIgnoreCase);
             if (new Uri(url).Query.Any() && !urlContainsTop)
             {
-                checkUrl += "&$top=1";
+                return $"{url}&$top=1";
             }
             else if (!urlContainsTop)
             {
-                checkUrl += "$top=1";
+                return $"{url}$top=1";
             }
+            return url;
         }
         else
         {
-            checkUrl += "?$top=1";
+            return $"{url}?$top=1";
         }
+    }
+
+    private bool CheckIfEndpointIsReadyForUse(string url)
+    {
+        string checkUrl = GetEndpointUrlWithTop(url);
         _logger?.Info($"Checking if endpoint: '{_endpoint.Name}' is ready for use on URL: '{checkUrl}'");
         bool result = false;
         Task task;
