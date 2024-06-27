@@ -686,29 +686,31 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
                         while (!sourceReader.IsDone())
                         {
                             var sourceRow = sourceReader.GetNext();
-                            ProcessInputRow(mapping, sourceRow);
-                            writer.Write(sourceRow);
-                            if (sourceReaderIsResponseWriter)
+                            if (ProcessInputRow(sourceRow, mapping))
                             {
-                                if (writer.PostBackObject != null && writer.PostBackObject.Count > 0)
+                                writer.Write(sourceRow);
+                                if (sourceReaderIsResponseWriter)
                                 {
-                                    Dictionary<string, object> responseToWrite = new Dictionary<string, object>();
-                                    foreach (var item in responseMappingCollection)
+                                    if (writer.PostBackObject != null && writer.PostBackObject.Count > 0)
                                     {
-                                        if (item.HasScriptWithValue)
+                                        Dictionary<string, object> responseToWrite = new Dictionary<string, object>();
+                                        foreach (var item in responseMappingCollection)
                                         {
-                                            responseToWrite.Add(item.DestinationColumn.Name, item.GetScriptValue());
-                                        }
-                                        else
-                                        {
-                                            var postBackValue = writer.GetPostBackValue(item);
-                                            if (postBackValue != null)
+                                            if (item.HasScriptWithValue)
                                             {
-                                                responseToWrite.Add(item.DestinationColumn.Name, postBackValue);
+                                                responseToWrite.Add(item.DestinationColumn.Name, item.GetScriptValue());
+                                            }
+                                            else
+                                            {
+                                                var postBackValue = writer.GetPostBackValue(item);
+                                                if (postBackValue != null)
+                                                {
+                                                    responseToWrite.Add(item.DestinationColumn.Name, postBackValue);
+                                                }
                                             }
                                         }
+                                        responseMappingWriter.Write(responseToWrite);
                                     }
-                                    responseMappingWriter.Write(responseToWrite);
                                 }
                             }
                         }
