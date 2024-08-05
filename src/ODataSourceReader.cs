@@ -276,7 +276,9 @@ internal class ODataSourceReader : ISourceReader
                     {
                         if (_mapping.SourceTable.Columns.Any(obj => obj.Name.Equals(delta, StringComparison.OrdinalIgnoreCase)))
                         {
-                            dateTimeFilterName = _mapping.SourceTable.Columns.Where(obj => obj.Name.Equals(delta, StringComparison.OrdinalIgnoreCase)).First().Name;
+                            var dateTimeFilterColumn = _mapping.SourceTable.Columns.Where(obj => obj.Name.Equals(delta, StringComparison.OrdinalIgnoreCase)).First();
+                            isEdmDate = dateTimeFilterColumn.Type == typeof(DateOnly);
+                            dateTimeFilterName = dateTimeFilterColumn.Name;
                             break;
                         }
                     }
@@ -290,11 +292,9 @@ internal class ODataSourceReader : ISourceReader
                         {
                             case "Last_Date_Modified":
                                 dateTimeFilterName = "Last_Date_Modified";
-                                isEdmDate = true;
                                 break;
                             case "Order_Date":
                                 dateTimeFilterName = "Order_Date";
-                                isEdmDate = true;
                                 break;
                             case "LastDateTimeModified":
                                 dateTimeFilterName = "LastDateTimeModified";
@@ -306,6 +306,7 @@ internal class ODataSourceReader : ISourceReader
                                 dateTimeFilterName = "modifiedon";
                                 break;
                         }
+                        isEdmDate = column.Type == typeof(DateOnly);
                     }
                 }
 
@@ -707,7 +708,8 @@ internal class ODataSourceReader : ISourceReader
             }
             else
             {
-                _logger?.Info($"{checkUrl} returned the HttpStatusCode of: '{responseStatusCode}' ");
+                StreamReader reader = new(responseStream);
+                _logger?.Info($"{checkUrl} returned the HttpStatusCode of: '{responseStatusCode}' {reader.ReadToEnd()}");
             }
         }
         return result;

@@ -119,6 +119,10 @@ internal class ODataWriter : IDisposable, IDestinationWriter
                         {
                             primaryKeyColumnValuesForPatch.Add($"{item.Key}={GetTheDateTimeInZeroTimeZone(item.Value, false)}");
                         }
+                        else if (columnKeyType == typeof(DateOnly))
+                        {
+                            primaryKeyColumnValuesForPatch.Add($"{item.Key}={GetTheDateTimeInZeroTimeZone(item.Value, true)}");
+                        }
                         else
                         {
                             primaryKeyColumnValuesForPatch.Add($"{item.Key}={item.Value}");
@@ -272,6 +276,10 @@ internal class ODataWriter : IDisposable, IDestinationWriter
             {
                 keyColumnValues.Add($"{keyMapping.DestinationColumn.Name} eq {GetTheDateTimeInZeroTimeZone(keyMapping.ConvertInputValueToOutputValue(row[keyMapping.SourceColumn?.Name]), false)}");
             }
+            else if (keyMapping.DestinationColumn.Type == typeof(DateOnly))
+            {
+                keyColumnValues.Add($"{keyMapping.DestinationColumn.Name} eq {GetTheDateTimeInZeroTimeZone(keyMapping.ConvertInputValueToOutputValue(row[keyMapping.SourceColumn?.Name]), true)}");
+            }
             else
             {
                 keyColumnValues.Add($"{keyMapping.DestinationColumn.Name} eq {keyMapping.ConvertInputValueToOutputValue(row[keyMapping.SourceColumn?.Name] ?? null)}");
@@ -307,6 +315,9 @@ internal class ODataWriter : IDisposable, IDestinationWriter
                     case "datetime":
                         jsonObject.Add(columnMapping.DestinationColumn.Name, GetTheDateTimeInZeroTimeZone(columnValue, false));
                         break;
+                    case "dateonly":
+                        jsonObject.Add(columnMapping.DestinationColumn.Name, GetTheDateTimeInZeroTimeZone(columnValue, true));
+                        break;
                     default:
                         jsonObject.Add(columnMapping.DestinationColumn.Name, Converter.ToString(columnValue));
                         break;
@@ -318,27 +329,32 @@ internal class ODataWriter : IDisposable, IDestinationWriter
 
     public static string GetTheDateTimeInZeroTimeZone(object dateTimeObject, bool isEdmDate)
     {
-        var dateTime = Converter.ToDateTime(dateTimeObject);
-        DateTime dateTimeInUtc;
-        if (SqlDateTime.MinValue.Value == dateTime || DateTime.MinValue == dateTime)
+        var inputString = Convert.ToString(dateTimeObject, CultureInfo.InvariantCulture);
+        if (DateTime.TryParse(inputString, CultureInfo.InvariantCulture, out var dateTime) ||
+            DateTime.TryParseExact(inputString, "dd-MM-yyyy HH:mm:ss:fff", CultureInfo.InvariantCulture, DateTimeStyles.None, out dateTime))
         {
-            return null;
-        }
-        else if (SqlDateTime.MaxValue.Value == dateTime || DateTime.MaxValue == dateTime)
-        {
-            return DateTime.MaxValue.ToString("yyyy-MM-dd");
-        }
+            DateTime dateTimeInUtc;
+            if (SqlDateTime.MinValue.Value > dateTime || DateTime.MinValue > dateTime)
+            {
+                return DateTime.MinValue.ToString("yyyy-MM-dd");
+            }
+            else if (SqlDateTime.MaxValue.Value < dateTime || DateTime.MaxValue < dateTime)
+            {
+                return DateTime.MaxValue.ToString("yyyy-MM-dd");
+            }
 
-        dateTimeInUtc = TimeZoneInfo.ConvertTimeToUtc(dateTime);
+            dateTimeInUtc = TimeZoneInfo.ConvertTimeToUtc(dateTime);
 
-        if (dateTimeInUtc.TimeOfDay.TotalMilliseconds > 0 && !isEdmDate)
-        {
-            return dateTimeInUtc.ToString("yyyy-MM-ddTHH:mm:ss.fff", CultureInfo.InvariantCulture) + "z";
+            if (dateTimeInUtc.TimeOfDay.TotalMilliseconds > 0 && !isEdmDate)
+            {
+                return dateTimeInUtc.ToString("yyyy-MM-ddTHH:mm:ss.fff", CultureInfo.InvariantCulture) + "z";
+            }
+            else
+            {
+                return dateTimeInUtc.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+            }
         }
-        else
-        {
-            return dateTimeInUtc.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
-        }
+        return null;
     }
 
     public void Dispose() { }
