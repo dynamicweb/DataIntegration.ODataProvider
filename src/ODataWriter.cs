@@ -333,25 +333,23 @@ internal class ODataWriter : IDisposable, IDestinationWriter
         if (DateTime.TryParse(inputString, CultureInfo.InvariantCulture, out var dateTime) ||
             DateTime.TryParseExact(inputString, "dd-MM-yyyy HH:mm:ss:fff", CultureInfo.InvariantCulture, DateTimeStyles.None, out dateTime))
         {
-            DateTime dateTimeInUtc;
-            if (SqlDateTime.MinValue.Value > dateTime || DateTime.MinValue > dateTime)
+            if (dateTime <= SqlDateTime.MinValue.Value || dateTime <= DateTime.MinValue)
             {
-                return DateTime.MinValue.ToString("yyyy-MM-dd");
+                return null;
             }
-            else if (SqlDateTime.MaxValue.Value < dateTime || DateTime.MaxValue < dateTime)
+            else if (dateTime >= SqlDateTime.MaxValue.Value || dateTime >= DateTime.MaxValue)
             {
-                return DateTime.MaxValue.ToString("yyyy-MM-dd");
+                return null;
             }
 
-            dateTimeInUtc = TimeZoneInfo.ConvertTimeToUtc(dateTime);
-
-            if (dateTimeInUtc.TimeOfDay.TotalMilliseconds > 0 && !isEdmDate)
+            if (!isEdmDate)
             {
+                var dateTimeInUtc = TimeZoneInfo.ConvertTimeToUtc(dateTime);
                 return dateTimeInUtc.ToString("yyyy-MM-ddTHH:mm:ss.fff", CultureInfo.InvariantCulture) + "z";
             }
             else
             {
-                return dateTimeInUtc.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+                return dateTime.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
             }
         }
         return null;
