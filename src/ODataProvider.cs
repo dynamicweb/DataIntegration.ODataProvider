@@ -410,6 +410,7 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
             case "Edm.Stream":
                 return typeof(Stream);
             case "Edm.Date":
+                return typeof(DateOnly);
             case "Edm.DateTimeOffset":
                 return typeof(DateTime);
             case "Edm.Boolean":
