@@ -102,6 +102,12 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
     [AddInParameterSection("Advanced activity settings")]
     public string DeltaModifier { get; set; }
 
+    [AddInParameter("Fail job if endpoint is busy or down")]
+    [AddInParameterEditor(typeof(YesNoParameterEditor), "Tooltip=If endpoint is busy or down doing the run time, it will not insert already imported rows.")]
+    [AddInParameterGroup("Source")]
+    [AddInParameterSection("Advanced activity settings")]
+    public bool FailJobOnEndpointIsBusy { get; set; }
+
     #endregion
 
     #region AddInManager/ConfigurableAddIn Destination
@@ -433,7 +439,7 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
             DoNotStoreLastResponseInLogFile = false;
         }
 
-        return new ODataSourceReader(new HttpRestClient(_credentials, RequestTimeout), Logger, mapping, _endpoint, Mode, DeltaModifier, MaximumPageSize, RunLastRequest, RequestIntervals, DoNotStoreLastResponseInLogFile);
+        return new ODataSourceReader(new HttpRestClient(_credentials, RequestTimeout), Logger, mapping, _endpoint, Mode, DeltaModifier, MaximumPageSize, RunLastRequest, RequestIntervals, DoNotStoreLastResponseInLogFile, FailJobOnEndpointIsBusy);
     }
 
     /// <inheritdoc />
@@ -515,6 +521,7 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
         RequestIntervals = newProvider.RequestIntervals;
         DoNotStoreLastResponseInLogFile = newProvider.DoNotStoreLastResponseInLogFile;
         EndpointId = newProvider.EndpointId;
+        FailJobOnEndpointIsBusy = newProvider.FailJobOnEndpointIsBusy;
     }
 
     public ODataProvider() { }
@@ -588,6 +595,12 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
                         ContinueOnError = node.FirstChild.Value == "True";
                     }
                     break;
+                case "Failjobonendpointisbusy":
+                    if (node.HasChildNodes)
+                    {
+                        FailJobOnEndpointIsBusy = node.FirstChild.Value == "True";
+                    }
+                    break;
             }
         }
     }
@@ -607,6 +620,7 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
         root.Add(CreateParameterNode(GetType(), "Predefined endpoint", EndpointId));
         root.Add(CreateParameterNode(GetType(), "Destination endpoint", DestinationEndpointId));
         root.Add(CreateParameterNode(GetType(), "Continue on error", ContinueOnError.ToString()));
+        root.Add(CreateParameterNode(GetType(), "Fail job if endpoint is busy or down", FailJobOnEndpointIsBusy.ToString()));
         return document.ToString();
     }
 
@@ -623,6 +637,7 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
         textWriter.WriteElementString("Predefinedendpoint", EndpointId);
         textWriter.WriteElementString("Destinationendpoint", DestinationEndpointId);
         textWriter.WriteElementString("Continueonerror", ContinueOnError.ToString());
+        textWriter.WriteElementString("Failjobonendpointisbusy", FailJobOnEndpointIsBusy.ToString());
         GetSchema().SaveAsXml(textWriter);
     }
 
