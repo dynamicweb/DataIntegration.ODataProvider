@@ -188,6 +188,10 @@ internal class ODataSourceReader : ISourceReader
                 {
                     parameters.Add(parameter.Key, parameter.Value);
                 }
+                else if (parameter.Key.Equals("$filter", StringComparison.OrdinalIgnoreCase) && !ODataProvider.EndpointIsLoadAllEntities(_endpoint.Url))
+                {
+                    parameters[parameter.Key] = $"{parameters[parameter.Key]} and {parameter.Value}";
+                }
             }
         }
 
