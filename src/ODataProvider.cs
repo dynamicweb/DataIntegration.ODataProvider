@@ -103,7 +103,7 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
     public string DeltaModifier { get; set; }
 
     [AddInParameter("Fail job if endpoint is busy or down")]
-    [AddInParameterEditor(typeof(YesNoParameterEditor), "Tooltip=If endpoint is busy or down doing the run time, it will not insert already imported rows.")]
+    [AddInParameterEditor(typeof(YesNoParameterEditor), "Tooltip=If endpoint is busy or down during the run time, it will not insert already imported rows.")]
     [AddInParameterGroup("Source")]
     [AddInParameterSection("Advanced activity settings")]
     public bool FailJobOnEndpointIsBusy { get; set; }
