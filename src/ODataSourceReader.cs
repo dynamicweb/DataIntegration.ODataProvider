@@ -315,7 +315,7 @@ internal class ODataSourceReader : ISourceReader
 
                 if (!string.IsNullOrWhiteSpace(dateTimeFilterName))
                 {
-                    var theDateTime = ODataWriter.GetTheDateTimeInZeroTimeZone(lastRunDateTime.Value.ToString(CultureInfo.InvariantCulture), isEdmDate);
+                    var theDateTime = ODataWriter.GetTheDateTimeInZeroTimeZone(lastRunDateTime.Value, isEdmDate);
                     if (isEdmDate)
                     {
                         dateTimeFilterName += " ge " + theDateTime;
