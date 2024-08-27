@@ -28,7 +28,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider;
 [AddInIgnore(false)]
 [AddInUseParameterSectioning(true)]
 [ResponseMapping(true)]
-public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOptions, IODataBaseProvider
+public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOptions, IODataBaseProvider, IParameterVisibility
 {
     internal readonly EndpointService _endpointService = new EndpointService();
     internal Schema _schema;
@@ -61,7 +61,7 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
     }
 
     [AddInParameter("Mode")]
-    [AddInParameterEditor(typeof(DropDownParameterEditor), "Info=Required;none=true;nonetext=Full Replication;noneHint=This mode gets all records and deletes nothing. This option should only run once.;columns=Mode|Comment;SortBy=Key;HideParameters=Run request in intervals (pages),Do not store last response in log file")]
+    [AddInParameterEditor(typeof(DropDownParameterEditor), "required=true;reloadOnChange=true;none=true;nonetext=Please select a Mode;SortBy=Key;")]
     [AddInParameterGroup("Source")]
     [AddInParameterSection("Advanced activity settings")]
     public string Mode { get; set; }
@@ -174,6 +174,27 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
         }
     }
 
+    IEnumerable<string> IParameterVisibility.GetHiddenParameterNames(string parameterName, object parameterValue)
+    {
+        var parameters = new List<string>();
+        switch (parameterName)
+        {
+            case nameof(Mode):
+                if (!"Full Replication".Equals((string)parameterValue, StringComparison.OrdinalIgnoreCase))
+                {
+                    parameters.Add("Run request in intervals (pages)");
+                    parameters.Add("Do not store last response in log file");
+                }
+                if (!"Delta replication".Equals((string)parameterValue, StringComparison.OrdinalIgnoreCase))
+                {
+                    parameters.Add("Delta modifier");
+                }
+                break;
+        }
+
+        return parameters;
+    }
+
     IEnumerable<ParameterOption> IParameterOptions.GetParameterOptions(string parameterName)
     {
         switch (parameterName ?? "")
@@ -182,6 +203,7 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
                 {
                     return new List<ParameterOption>()
                     {
+                        { new("Full Replication", "Full Replication") { Hint = "This mode gets all records and deletes nothing. This option should only run once." } },
                         { new("Delta replication", "Delta Replication") { Hint = "This mode filters records on date and time, whenever possible, and it only acts on new or updated records. It never deletes." } },
                         { new("First page", "First page") { Hint = "If maximum page size is 100 then this setting only handles the 100 records of the first page." } }
                     };
@@ -433,7 +455,7 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
             throw new Exception("License check for OData failed.");
         }
 
-        if (!string.IsNullOrEmpty(Mode))
+        if (!string.IsNullOrEmpty(Mode) && !Mode.Equals("Full Replication", StringComparison.OrdinalIgnoreCase))
         {
             RequestIntervals = 0;
             DoNotStoreLastResponseInLogFile = false;
@@ -454,6 +476,10 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
         if (string.IsNullOrEmpty(EndpointId))
         {
             return "Predefined endpoint can not be empty. Please select any predefined endpoint.";
+        }
+        if (string.IsNullOrEmpty(Mode))
+        {
+            return "Mode can not be empty. Please select a mode.";
         }
         if (_endpoint?.Authentication == null)
         {

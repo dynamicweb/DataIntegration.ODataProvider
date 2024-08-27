@@ -318,7 +318,7 @@ internal class ODataWriter : IDisposable, IDestinationWriter
 
     public static string GetTheDateTimeInZeroTimeZone(object dateTimeObject, bool isEdmDate)
     {
-        var dateTime = Converter.ToDateTime(dateTimeObject);
+        DateTime dateTime = (dateTimeObject is not null && dateTimeObject is DateTime) ? (DateTime)dateTimeObject : Converter.ToDateTime(dateTimeObject);
         DateTime dateTimeInUtc;
         if (SqlDateTime.MinValue.Value == dateTime || DateTime.MinValue == dateTime)
         {
