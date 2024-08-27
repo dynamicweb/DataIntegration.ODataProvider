@@ -8,7 +8,6 @@ using Dynamicweb.Logging;
 using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -44,6 +43,7 @@ internal class ODataSourceReader : ISourceReader
     private bool _requestTimedOutFromGlobalSettings;
     private readonly int _maximumCharacterLengthOfAutoAddedSelectStatement = 1250;
     private readonly int _timeoutInMilliseconds;
+    private readonly bool _failJobOnEndpointIsBusy;
 
     internal void SaveRequestResponseFile()
     {
@@ -95,7 +95,7 @@ internal class ODataSourceReader : ISourceReader
     /// <param name="mapping">The mapping.</param>
     /// <param name="endpoint">The endpoint.</param>
     /// <param name="nextPaginationUrlName">Name of the next pagination URL. "odata.nextLink" (case insensitive) is supposed to be a standard.</param>
-    internal ODataSourceReader(IHttpRestClient httpRestClient, ILogger logger, Mapping mapping, Endpoint endpoint, string mode, string deltaModifier, int maximumPageSize, bool readFromLastRequestResponse, int requestIntervals, bool doNotStoreLastResponseInLogFile, string nextPaginationUrlName = "odata.nextLink")
+    internal ODataSourceReader(IHttpRestClient httpRestClient, ILogger logger, Mapping mapping, Endpoint endpoint, string mode, string deltaModifier, int maximumPageSize, bool readFromLastRequestResponse, int requestIntervals, bool doNotStoreLastResponseInLogFile, bool failJobOnEndpointIsBusy, string nextPaginationUrlName = "odata.nextLink")
     {
         _totalResponseResult = new List<Dictionary<string, object>>();
         _httpRestClient = httpRestClient;
@@ -109,6 +109,7 @@ internal class ODataSourceReader : ISourceReader
         _requestIntervals = requestIntervals;
         _doNotStoreLastResponseInLogFile = doNotStoreLastResponseInLogFile;
         _timeoutInMilliseconds = GetTimeOutInMilliseconds();
+        _failJobOnEndpointIsBusy = failJobOnEndpointIsBusy;
         string logFileName = Scheduling.Task.MakeSafeFileName(mapping.Job.Name) + $"_{_mapping.SourceTable.Name}.log";
 
         IDictionary<string, string> headers = GetAllHeaders();
@@ -187,6 +188,10 @@ internal class ODataSourceReader : ISourceReader
                 if (!parameters.ContainsKey(parameter.Key))
                 {
                     parameters.Add(parameter.Key, parameter.Value);
+                }
+                else if (parameter.Key.Equals("$filter", StringComparison.OrdinalIgnoreCase) && !ODataProvider.EndpointIsLoadAllEntities(_endpoint.Url))
+                {
+                    parameters[parameter.Key] = $"{parameters[parameter.Key]} and {parameter.Value}";
                 }
             }
         }
@@ -312,7 +317,7 @@ internal class ODataSourceReader : ISourceReader
 
                 if (!string.IsNullOrWhiteSpace(dateTimeFilterName))
                 {
-                    var theDateTime = ODataWriter.GetTheDateTimeInZeroTimeZone(lastRunDateTime.Value.ToString(CultureInfo.InvariantCulture), isEdmDate);
+                    var theDateTime = ODataWriter.GetTheDateTimeInZeroTimeZone(lastRunDateTime.Value, isEdmDate);
                     if (isEdmDate)
                     {
                         dateTimeFilterName += " ge " + theDateTime;
@@ -565,7 +570,7 @@ internal class ODataSourceReader : ISourceReader
         yield return null;
     }
 
-    private bool HandleRequest(string url, string loggerInfo, IDictionary<string, string> headers)
+    private bool HandleRequest(string url, string loggerInfo, IDictionary<string, string> headers, int retryCounter = 0)
     {
         if (CheckIfEndpointIsReadyForUse(url))
         {
@@ -593,6 +598,15 @@ internal class ODataSourceReader : ISourceReader
         else
         {
             _logger?.Info($"Endpoint: '{_endpoint.Name}' is not ready for use on URL: '{url}'");
+            if (retryCounter < 2)
+            {
+                retryCounter++;
+                _logger?.Info($"Will wait and retry again in 5 seconds.");
+                Thread.Sleep(5000);
+                _logger?.Info($"This is retry {retryCounter} out of 2");
+                HandleRequest(url, loggerInfo, headers, retryCounter);
+            }
+
             return false;
         }
     }
@@ -708,8 +722,17 @@ internal class ODataSourceReader : ISourceReader
             }
             else
             {
-                StreamReader reader = new(responseStream);
-                _logger?.Info($"{checkUrl} returned the HttpStatusCode of: '{responseStatusCode}' {reader.ReadToEnd()}");
+                using var stream = new StreamReader(responseStream);
+                var streamResponse = stream.ReadToEnd();
+
+                if (_failJobOnEndpointIsBusy)
+                {
+                    throw new WebException($"{checkUrl} returned: {streamResponse} with the HttpStatusCode of: '{responseStatusCode}' ");
+                }
+                else
+                {
+                    _logger?.Info($"{checkUrl} returned: {streamResponse} with the HttpStatusCode of: '{responseStatusCode}' ");
+                }
             }
         }
         return result;
