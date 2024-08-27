@@ -8,7 +8,6 @@ using Dynamicweb.Logging;
 using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -606,7 +605,7 @@ internal class ODataSourceReader : ISourceReader
                 _logger?.Info($"This is retry {retryCounter} out of 2");
                 HandleRequest(url, loggerInfo, headers, retryCounter);
             }
-            
+
             return false;
         }
     }
@@ -722,13 +721,16 @@ internal class ODataSourceReader : ISourceReader
             }
             else
             {
+                using var stream = new StreamReader(responseStream);
+                var streamResponse = stream.ReadToEnd();
+
                 if (_failJobOnEndpointIsBusy)
                 {
-                    throw new WebException($"{checkUrl} returned the HttpStatusCode of: '{responseStatusCode}' ");
+                    throw new WebException($"{checkUrl} returned: {streamResponse} with the HttpStatusCode of: '{responseStatusCode}' ");
                 }
                 else
                 {
-                    _logger?.Info($"{checkUrl} returned the HttpStatusCode of: '{responseStatusCode}' ");
+                    _logger?.Info($"{checkUrl} returned: {streamResponse} with the HttpStatusCode of: '{responseStatusCode}' ");
                 }
             }
         }
