@@ -570,7 +570,7 @@ internal class ODataSourceReader : ISourceReader
         yield return null;
     }
 
-    private bool HandleRequest(string url, string loggerInfo, IDictionary<string, string> headers)
+    private bool HandleRequest(string url, string loggerInfo, IDictionary<string, string> headers, int retryCounter = 0)
     {
         if (CheckIfEndpointIsReadyForUse(url))
         {
@@ -598,6 +598,15 @@ internal class ODataSourceReader : ISourceReader
         else
         {
             _logger?.Info($"Endpoint: '{_endpoint.Name}' is not ready for use on URL: '{url}'");
+            if (retryCounter < 2)
+            {
+                retryCounter++;
+                _logger?.Info($"Will wait and retry again in 5 seconds.");
+                Thread.Sleep(5000);
+                _logger?.Info($"This is retry {retryCounter} out of 2");
+                HandleRequest(url, loggerInfo, headers, retryCounter);
+            }
+            
             return false;
         }
     }
