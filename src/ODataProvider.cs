@@ -215,11 +215,6 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
             case "Predefined endpoint":
                 {
                     var result = new List<ParameterOption>();
-                    //foreach (var endpoint in _endpointService.GetEndpoints())
-                    //{
-                    //    var value = new GroupedDropDownParameterEditor.DropDownItem(endpoint.Name, endpoint.Collection != null ? endpoint.Collection.Name : "Dynamicweb 9 Endpoints", endpoint.Id.ToString());
-                    //    result.Add(new(endpoint.Name, value) { Group = endpoint.Collection != null ? endpoint.Collection.Name : "Dynamicweb 9 Endpoints" });
-                    //}
 
                     foreach(var collection in _endpointCollectionService.GetEndpointCollections().OrderBy(ec => ec.Sorting))
 					{
