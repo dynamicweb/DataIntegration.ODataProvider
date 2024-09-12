@@ -9,6 +9,7 @@ using Dynamicweb.Extensibility.AddIns;
 using Dynamicweb.Extensibility.Editors;
 using Dynamicweb.Logging;
 using Dynamicweb.Security.Licensing;
+using Microsoft.Graph.Security.Triggers.RetentionEvents.Item.RetentionEventType;
 using System;
 using System.Collections.Generic;
 using System.IO;
@@ -31,7 +32,8 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider;
 public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOptions, IODataBaseProvider, IParameterVisibility
 {
     internal readonly EndpointService _endpointService = new EndpointService();
-    internal Schema _schema;
+    internal readonly EndpointCollectionService _endpointCollectionService = new EndpointCollectionService();
+	internal Schema _schema;
     internal Endpoint _endpoint;
     internal ICredentials _credentials;
     private const string OldBCBatch = "eCom_DataIntegrationERPBatch";
@@ -47,7 +49,7 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
     #region AddInManager/ConfigurableAddIn Source
 
     [AddInParameter("Predefined endpoint")]
-    [AddInParameterEditor(typeof(GroupedDropDownParameterEditor), "none=true;refreshParameters=true;required=true")]
+    [AddInParameterEditor(typeof(GroupedDropDownParameterEditor), "none=true;refreshParameters=true;required=true;sortBy=,,default")]
     [AddInParameterGroup("Source")]
     [AddInParameterSection("Source")]
     public string EndpointId
@@ -213,11 +215,27 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
             case "Predefined endpoint":
                 {
                     var result = new List<ParameterOption>();
-                    foreach (var endpoint in _endpointService.GetEndpoints())
-                    {
-                        var value = new GroupedDropDownParameterEditor.DropDownItem(endpoint.Name, endpoint.Collection != null ? endpoint.Collection.Name : "Dynamicweb 9 Endpoints", endpoint.Id.ToString());
-                        result.Add(new(endpoint.Name, value) { Group = endpoint.Collection != null ? endpoint.Collection.Name : "Dynamicweb 9 Endpoints" });
-                    }
+                    //foreach (var endpoint in _endpointService.GetEndpoints())
+                    //{
+                    //    var value = new GroupedDropDownParameterEditor.DropDownItem(endpoint.Name, endpoint.Collection != null ? endpoint.Collection.Name : "Dynamicweb 9 Endpoints", endpoint.Id.ToString());
+                    //    result.Add(new(endpoint.Name, value) { Group = endpoint.Collection != null ? endpoint.Collection.Name : "Dynamicweb 9 Endpoints" });
+                    //}
+
+                    foreach(var collection in _endpointCollectionService.GetEndpointCollections().OrderBy(ec => ec.Sorting))
+					{
+                        var parameterOptions = _endpointCollectionService.GetEndpoints(collection.Id).Select(endpoint => 
+                        new ParameterOption(endpoint.Name,new GroupedDropDownParameterEditor.DropDownItem(endpoint.Name, collection.Name, endpoint.Id.ToString())) 
+                        { 
+                            Group = collection.Name
+                        });
+						result.AddRange(parameterOptions);
+					}
+                    result.AddRange(_endpointService.GetEndpoints().Where(e => e.Collection == null).Select(endpoint =>
+						new ParameterOption(endpoint.Name, new GroupedDropDownParameterEditor.DropDownItem(endpoint.Name, "Dynamicweb 9 Endpoints", endpoint.Id.ToString()))
+						{
+							Group = "Dynamicweb 9 Endpoints"
+						}));
+
                     return result;
                 }
 
