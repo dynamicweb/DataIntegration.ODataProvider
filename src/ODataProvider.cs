@@ -243,6 +243,23 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
         }
     }
 
+    string ISource.GetId() => $"Source|ODataProvider|{EndpointId}";
+
+    string IDestination.GetId() => $"Destination|ODataProvider|{DestinationEndpointId}";
+
+    public override string GetDetails(string id)
+    {
+        var parts = id.Split('|');
+        if (parts.Length != 3)
+            return null;
+
+        var endpointId = parts[2];
+        if (!int.TryParse(endpointId, out int idInt))
+            return null;
+
+        var endpoint = _endpointService.GetEndpointById(idInt);
+        return $"Endpoint name: {endpoint.Name}";
+    }
 
     /// <inheritdoc />
     public override Schema GetSchema()
@@ -665,7 +682,8 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
         textWriter.WriteElementString("Destinationendpoint", DestinationEndpointId);
         textWriter.WriteElementString("Continueonerror", ContinueOnError.ToString());
         textWriter.WriteElementString("Failjobonendpointisbusy", FailJobOnEndpointIsBusy.ToString());
-        GetSchema().SaveAsXml(textWriter);
+        if (!Feature.IsActive<SchemaManagementFeature>())
+            GetSchema().SaveAsXml(textWriter);
     }
 
     /// <inheritdoc />
