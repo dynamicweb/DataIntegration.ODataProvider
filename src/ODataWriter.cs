@@ -93,7 +93,7 @@ internal class ODataWriter : IDisposable, IDestinationWriter
                 var jsonObject = response[0];
                 Logger?.Info($"Received response from Endpoint = {jsonObject.ToJsonString()}");
 
-                var patchJson = MapValuesToJSon(Row, true);
+                var patchJson = MapValuesToJson(Row, true);
                 if (patchJson.Equals(new JsonObject().ToString()))
                 {
                     Logger?.Info($"Skipped PATCH as no active column mappings is added for always apply.");
@@ -138,12 +138,12 @@ internal class ODataWriter : IDisposable, IDestinationWriter
             }
             else
             {
-                awaitResponseFromEndpoint = PostToEndpoint<JsonObject>(url, MapValuesToJSon(Row, false), null, false);
+                awaitResponseFromEndpoint = PostToEndpoint<JsonObject>(url, MapValuesToJson(Row, false), null, false);
             }
         }
         else
         {
-            awaitResponseFromEndpoint = PostToEndpoint<JsonObject>(url, MapValuesToJSon(Row, false), null, false);
+            awaitResponseFromEndpoint = PostToEndpoint<JsonObject>(url, MapValuesToJson(Row, false), null, false);
         }
         awaitResponseFromEndpoint.Wait();
         if (!string.IsNullOrEmpty(awaitResponseFromEndpoint?.Result?.Error))
@@ -288,7 +288,7 @@ internal class ODataWriter : IDisposable, IDestinationWriter
         return keyColumnValues;
     }
 
-    internal string MapValuesToJSon(Dictionary<string, object> row, bool isPatchRequest)
+    internal string MapValuesToJson(Dictionary<string, object> row, bool isPatchRequest)
     {
         var jsonObject = new JsonObject();
 
@@ -299,7 +299,7 @@ internal class ODataWriter : IDisposable, IDestinationWriter
 
             if (columnMapping.HasScriptWithValue || row.ContainsKey(columnMapping.SourceColumn?.Name))
             {
-                var columnValue = columnMapping.ConvertInputValueToOutputValue(row[columnMapping.SourceColumn?.Name] ?? null);
+                var columnValue = columnMapping.ConvertInputValueToOutputValue(columnMapping.HasScriptWithValue ? null : row.TryGetValue(columnMapping.SourceColumn?.Name ?? "", out var value) ? value : null);
 
                 switch (columnMapping.DestinationColumn.Type.Name.ToLower())
                 {
