@@ -299,7 +299,7 @@ internal class ODataWriter : IDisposable, IDestinationWriter
 
             if (columnMapping.HasScriptWithValue || row.ContainsKey(columnMapping.SourceColumn?.Name))
             {
-                var columnValue = columnMapping.ConvertInputValueToOutputValue(row[columnMapping.SourceColumn?.Name] ?? null);
+                var columnValue = columnMapping.ConvertInputValueToOutputValue(columnMapping.HasScriptWithValue ? null : row.TryGetValue(columnMapping.SourceColumn?.Name ?? "", out var value) ? value : null);
 
                 switch (columnMapping.DestinationColumn.Type.Name.ToLower())
                 {
