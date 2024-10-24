@@ -8,6 +8,7 @@ using Dynamicweb.Ecommerce.Orders;
 using Dynamicweb.Logging;
 using System;
 using System.Collections.Generic;
+using System.Data;
 using System.Data.SqlTypes;
 using System.Globalization;
 using System.Linq;
@@ -268,21 +269,22 @@ internal class ODataWriter : IDisposable, IDestinationWriter
         var keyColumnValues = new List<string>();
         foreach (var keyMapping in _columnMappings.Where(cm => cm != null && cm.IsKey))
         {
+            var keyMappingValue = keyMapping.HasScriptWithValue ? null : row.TryGetValue(keyMapping.SourceColumn?.Name ?? "", out var value) ? value : null;
             if (keyMapping.DestinationColumn.Type == typeof(string))
             {
-                keyColumnValues.Add($"{keyMapping.DestinationColumn.Name} eq '{keyMapping.ConvertInputValueToOutputValue(row[keyMapping.SourceColumn?.Name] ?? null)}'");
+                keyColumnValues.Add($"{keyMapping.DestinationColumn.Name} eq '{keyMapping.ConvertInputValueToOutputValue(keyMappingValue)}'");
             }
             else if (keyMapping.DestinationColumn.Type == typeof(DateTime))
             {
-                keyColumnValues.Add($"{keyMapping.DestinationColumn.Name} eq {GetTheDateTimeInZeroTimeZone(keyMapping.ConvertInputValueToOutputValue(row[keyMapping.SourceColumn?.Name]), false)}");
+                keyColumnValues.Add($"{keyMapping.DestinationColumn.Name} eq {GetTheDateTimeInZeroTimeZone(keyMapping.ConvertInputValueToOutputValue(keyMappingValue), false)}");
             }
             else if (keyMapping.DestinationColumn.Type == typeof(DateOnly))
             {
-                keyColumnValues.Add($"{keyMapping.DestinationColumn.Name} eq {GetTheDateTimeInZeroTimeZone(keyMapping.ConvertInputValueToOutputValue(row[keyMapping.SourceColumn?.Name]), true)}");
+                keyColumnValues.Add($"{keyMapping.DestinationColumn.Name} eq {GetTheDateTimeInZeroTimeZone(keyMapping.ConvertInputValueToOutputValue(keyMappingValue), true)}");
             }
             else
             {
-                keyColumnValues.Add($"{keyMapping.DestinationColumn.Name} eq {keyMapping.ConvertInputValueToOutputValue(row[keyMapping.SourceColumn?.Name] ?? null)}");
+                keyColumnValues.Add($"{keyMapping.DestinationColumn.Name} eq {keyMapping.ConvertInputValueToOutputValue(keyMappingValue)}");
             }
         }
         return keyColumnValues;
