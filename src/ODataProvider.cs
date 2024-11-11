@@ -31,7 +31,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider;
 [ResponseMapping(true)]
 public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOptions, IODataBaseProvider, IParameterVisibility
 {
-    internal readonly EndpointService _endpointService = new EndpointService();
+    internal readonly EndpointService _endpointService = new();
     internal Schema _schema;
     internal Endpoint _endpoint;
     internal ICredentials _credentials;
