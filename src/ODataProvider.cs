@@ -9,7 +9,6 @@ using Dynamicweb.Extensibility.AddIns;
 using Dynamicweb.Extensibility.Editors;
 using Dynamicweb.Logging;
 using Dynamicweb.Security.Licensing;
-using Microsoft.Graph.Security.Triggers.RetentionEvents.Item.RetentionEventType;
 using System;
 using System.Collections.Generic;
 using System.IO;
