@@ -132,22 +132,14 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
     private string GetMetadataURL()
     {
         if (GetEndpointResponse(ODataSourceReader.GetEndpointUrlWithTop(_endpoint.Url), out string endpointResponse, out Exception exception) == HttpStatusCode.OK && exception is null)
-        {
-            using (var responseJson = JsonDocument.Parse(endpointResponse))
-            {
-                if (responseJson.RootElement.ValueKind == JsonValueKind.Object)
-                {
-                    foreach (var jsonProperty in responseJson.RootElement.EnumerateObject())
-                    {
-                        if (jsonProperty.Name.Equals("@odata.context", StringComparison.OrdinalIgnoreCase))
-                            return jsonProperty.Value.GetString() ?? GetMetadataURLFallBack();
-                    }
+            return GetMetadataURLFallBack();
 
-                }
-            }
-        }
-        return GetMetadataURLFallBack();
+        using var responseJson = JsonDocument.Parse(endpointResponse);
 
+        if (responseJson.RootElement.ValueKind != JsonValueKind.Object)
+            return GetMetadataURLFallBack();
+
+        return responseJson.RootElement.EnumerateObject().FirstOrDefault(obj => obj.Name.Equals("@odata.context", StringComparison.OrdinalIgnoreCase)).Value.GetString() ?? GetMetadataURLFallBack();
     }
 
     private string GetMetadataURLFallBack()
