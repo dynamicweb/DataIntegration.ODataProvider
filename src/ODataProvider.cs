@@ -130,6 +130,19 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
 
     private string GetMetadataURL()
     {
+        if (GetEndpointResponse(ODataSourceReader.GetEndpointUrlWithTop(_endpoint.Url), out string endpointResponse, out Exception exception) == HttpStatusCode.OK && exception is null)
+            return GetMetadataURLFallBack();
+
+        using var responseJson = JsonDocument.Parse(endpointResponse);
+
+        if (responseJson.RootElement.ValueKind != JsonValueKind.Object)
+            return GetMetadataURLFallBack();
+
+        return responseJson.RootElement.EnumerateObject().FirstOrDefault(obj => obj.Name.Equals("@odata.context", StringComparison.OrdinalIgnoreCase)).Value.GetString() ?? GetMetadataURLFallBack();
+    }
+
+    private string GetMetadataURLFallBack()
+    {
         if (_endpoint.Url.Contains("companies(", StringComparison.OrdinalIgnoreCase))
         {
             return _endpoint.Url.Substring(0, _endpoint.Url.IndexOf("companies(", StringComparison.OrdinalIgnoreCase)) + "$metadata";
