@@ -32,7 +32,7 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
 {
     internal readonly EndpointService _endpointService = new EndpointService();
     internal readonly EndpointCollectionService _endpointCollectionService = new EndpointCollectionService();
-	internal Schema _schema;
+    internal Schema _schema;
     internal Endpoint _endpoint;
     internal ICredentials _credentials;
     private const string OldBCBatch = "eCom_DataIntegrationERPBatch";
