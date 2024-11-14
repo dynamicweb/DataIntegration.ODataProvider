@@ -15,6 +15,7 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Xml;
@@ -177,7 +178,7 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
             var endpointAuthentication = _endpoint.Authentication;
             if (endpointAuthentication != null)
             {
-                var metadataUri = new Uri(GetMetadataURL());
+                var metadataUri = new Uri(_endpoint.Url);
                 var credentialCache = new CredentialCache
                 {
                     { new Uri(metadataUri.GetLeftPart(UriPartial.Authority)), endpointAuthentication.Type.ToString(), endpointAuthentication.GetNetworkCredential() }
