@@ -1,4 +1,15 @@
-﻿using Dynamicweb.Core;
+﻿using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+using System.Threading.Tasks;
+using System.Xml;
+using System.Xml.Linq;
+using Dynamicweb.Core;
 using Dynamicweb.DataIntegration.EndpointManagement;
 using Dynamicweb.DataIntegration.Integration;
 using Dynamicweb.DataIntegration.Integration.ERPIntegration;
@@ -9,16 +20,6 @@ using Dynamicweb.Extensibility.AddIns;
 using Dynamicweb.Extensibility.Editors;
 using Dynamicweb.Logging;
 using Dynamicweb.Security.Licensing;
-using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Net;
-using System.Net.Http;
-using System.Text.RegularExpressions;
-using System.Threading.Tasks;
-using System.Xml;
-using System.Xml.Linq;
 
 namespace Dynamicweb.DataIntegration.Providers.ODataProvider;
 
@@ -30,7 +31,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider;
 [ResponseMapping(true)]
 public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOptions, IODataBaseProvider, IParameterVisibility
 {
-    internal readonly EndpointService _endpointService = new EndpointService();
+    internal readonly EndpointService _endpointService = new();
     internal Schema _schema;
     internal Endpoint _endpoint;
     internal ICredentials _credentials;
@@ -130,6 +131,19 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
 
     private string GetMetadataURL()
     {
+        if (GetEndpointResponse(ODataSourceReader.GetEndpointUrlWithTop(_endpoint.Url), out string endpointResponse, out Exception exception) == HttpStatusCode.OK && exception is null)
+            return GetMetadataURLFallBack();
+
+        using var responseJson = JsonDocument.Parse(endpointResponse);
+
+        if (responseJson.RootElement.ValueKind != JsonValueKind.Object)
+            return GetMetadataURLFallBack();
+
+        return responseJson.RootElement.EnumerateObject().FirstOrDefault(obj => obj.Name.Equals("@odata.context", StringComparison.OrdinalIgnoreCase)).Value.GetString() ?? GetMetadataURLFallBack();
+    }
+
+    private string GetMetadataURLFallBack()
+    {
         if (_endpoint.Url.Contains("companies(", StringComparison.OrdinalIgnoreCase))
         {
             return _endpoint.Url.Substring(0, _endpoint.Url.IndexOf("companies(", StringComparison.OrdinalIgnoreCase)) + "$metadata";
@@ -164,7 +178,7 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
             var endpointAuthentication = _endpoint.Authentication;
             if (endpointAuthentication != null)
             {
-                var metadataUri = new Uri(GetMetadataURL());
+                var metadataUri = new Uri(_endpoint.Url);
                 var credentialCache = new CredentialCache
                 {
                     { new Uri(metadataUri.GetLeftPart(UriPartial.Authority)), endpointAuthentication.Type.ToString(), endpointAuthentication.GetNetworkCredential() }
