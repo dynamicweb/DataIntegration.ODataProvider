@@ -50,7 +50,6 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
     [AddInParameter("Predefined endpoint")]
     [AddInParameterEditor(typeof(GroupedDropDownParameterEditor), "none=true;refreshParameters=true;required=true;sortBy=,,default")]
     [AddInParameterGroup("Source")]
-    [AddInParameterSection("Source")]
     public string EndpointId
     {
         get => _endpoint?.Id.ToString();
@@ -64,49 +63,41 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
     [AddInParameter("Mode")]
     [AddInParameterEditor(typeof(DropDownParameterEditor), "required=true;reloadOnChange=true;none=true;nonetext=Please select a Mode;SortBy=Key;")]
     [AddInParameterGroup("Source")]
-    [AddInParameterSection("Advanced activity settings")]
     public string Mode { get; set; }
 
     [AddInParameter("Maximum page size")]
     [AddInParameterEditor(typeof(IntegerNumberParameterEditor), "allowNegativeValues=false")]
     [AddInParameterGroup("Source")]
-    [AddInParameterSection("Advanced activity settings")]
     public int MaximumPageSize { get; set; }
 
     [AddInParameter("Request timeout (minutes)")]
     [AddInParameterEditor(typeof(IntegerNumberParameterEditor), "allowNegativeValues=false")]
     [AddInParameterGroup("Source")]
-    [AddInParameterSection("Advanced activity settings")]
     public int RequestTimeout { get; set; } = 20;
 
     [AddInParameter("Run last response")]
     [AddInParameterEditor(typeof(YesNoParameterEditor), "Tooltip=Runs the job from the last saved response instead of calling the endpoint.")]
     [AddInParameterGroup("Source")]
-    [AddInParameterSection("Advanced activity settings")]
     public bool RunLastRequest { get; set; }
 
     [AddInParameter("Run request in intervals (pages)")]
     [AddInParameterEditor(typeof(IntegerNumberParameterEditor), "allowNegativeValues=false")]
     [AddInParameterGroup("Source")]
-    [AddInParameterSection("Advanced activity settings")]
     public int RequestIntervals { get; set; } = 0;
 
     [AddInParameter("Do not store last response in log file")]
     [AddInParameterEditor(typeof(YesNoParameterEditor), "Tooltip=Usefull when working with large amount of data.")]
     [AddInParameterGroup("Source")]
-    [AddInParameterSection("Advanced activity settings")]
     public bool DoNotStoreLastResponseInLogFile { get; set; }
 
     [AddInParameter("Delta modifier")]
     [AddInParameterEditor(typeof(TextParameterEditor), "infoText=Add your own delta properties. Default looking at these properties: Last_Date_Modified, Order_Date, LastDateTimeModified, lastModifiedDateTime and modifiedon.;inputClass=NewUIinput;")]
     [AddInParameterGroup("Source")]
-    [AddInParameterSection("Advanced activity settings")]
     public string DeltaModifier { get; set; }
 
     [AddInParameter("Fail job if endpoint is busy or down")]
     [AddInParameterEditor(typeof(YesNoParameterEditor), "Tooltip=If endpoint is busy or down during the run time, it will not insert already imported rows.")]
     [AddInParameterGroup("Source")]
-    [AddInParameterSection("Advanced activity settings")]
     public bool FailJobOnEndpointIsBusy { get; set; }
 
     #endregion
