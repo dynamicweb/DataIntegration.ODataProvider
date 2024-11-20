@@ -131,7 +131,7 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
 
     private string GetMetadataURL()
     {
-        if (GetEndpointResponse(ODataSourceReader.GetEndpointUrlWithTop(_endpoint.Url), out string endpointResponse, out Exception exception) == HttpStatusCode.OK && exception is null)
+        if (GetEndpointResponse(ODataSourceReader.GetEndpointUrlWithTop(_endpoint.Url), out string endpointResponse, out Exception exception) != HttpStatusCode.OK || exception is not null)
             return GetMetadataURLFallBack();
 
         using var responseJson = JsonDocument.Parse(endpointResponse);
