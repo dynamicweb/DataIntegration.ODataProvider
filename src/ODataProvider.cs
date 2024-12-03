@@ -368,10 +368,6 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
                             entitySetsTables.AddTable(singleEntitySetSelected);
                         }
                     }
-                    if (entitySetsTables.GetTables().Count == 0 && entityTypeTables.GetTables().Count > 0)
-                    {
-                        entitySetsTables = entityTypeTables;
-                    }
                 }
             }
             catch (Exception e)
