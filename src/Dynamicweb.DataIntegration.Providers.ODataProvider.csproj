@@ -24,11 +24,15 @@
 		<SymbolPackageFormat>snupkg</SymbolPackageFormat>
 	</PropertyGroup>
 	<ItemGroup>
-		<PackageReference Include="Dynamicweb.DataIntegration" Version="10.8.0" />
 		<PackageReference Include="Dynamicweb.Ecommerce" Version="10.8.0" />
 		<PackageReference Include="Microsoft.SourceLink.GitHub" Version="1.1.1" PrivateAssets="All" />
 	</ItemGroup>
   <ItemGroup>
     <None Include="odata-logo.png" Pack="true" Visible="false" PackagePath="\" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="Dynamicweb.DataIntegration">
+      <HintPath>..\..\..\Dynamicweb10\src\Features\DataIntegration\Dynamicweb.DataIntegration\bin\Debug\net8.0\Dynamicweb.DataIntegration.dll</HintPath>
+    </Reference>
   </ItemGroup>
 </Project>

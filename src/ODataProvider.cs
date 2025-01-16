@@ -1,5 +1,18 @@
-﻿using System;
+﻿using Dynamicweb.Core;
+using Dynamicweb.DataIntegration.EndpointManagement;
+using Dynamicweb.DataIntegration.Integration;
+using Dynamicweb.DataIntegration.Integration.ERPIntegration;
+using Dynamicweb.DataIntegration.Integration.Interfaces;
+using Dynamicweb.DataIntegration.ProviderHelpers;
+using Dynamicweb.DataIntegration.Providers.ODataProvider.Interfaces;
+using Dynamicweb.DataIntegration.Providers.ODataProvider.Model;
+using Dynamicweb.Extensibility.AddIns;
+using Dynamicweb.Extensibility.Editors;
+using Dynamicweb.Logging;
+using Dynamicweb.Security.Licensing;
+using System;
 using System.Collections.Generic;
+using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
 using System.Net;
@@ -9,17 +22,6 @@ using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 using System.Xml;
 using System.Xml.Linq;
-using Dynamicweb.Core;
-using Dynamicweb.DataIntegration.EndpointManagement;
-using Dynamicweb.DataIntegration.Integration;
-using Dynamicweb.DataIntegration.Integration.ERPIntegration;
-using Dynamicweb.DataIntegration.Integration.Interfaces;
-using Dynamicweb.DataIntegration.Providers.ODataProvider.Interfaces;
-using Dynamicweb.DataIntegration.Providers.ODataProvider.Model;
-using Dynamicweb.Extensibility.AddIns;
-using Dynamicweb.Extensibility.Editors;
-using Dynamicweb.Logging;
-using Dynamicweb.Security.Licensing;
 
 namespace Dynamicweb.DataIntegration.Providers.ODataProvider;
 
@@ -31,7 +33,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider;
 [ResponseMapping(true)]
 public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOptions, IODataBaseProvider, IParameterVisibility
 {
-    internal readonly EndpointService _endpointService = new(); 
+    internal readonly EndpointService _endpointService = new();
     internal readonly EndpointCollectionService _endpointCollectionService = new EndpointCollectionService();
     internal Schema _schema;
     internal Endpoint _endpoint;
@@ -219,20 +221,20 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
                 {
                     var result = new List<ParameterOption>();
 
-                    foreach(var collection in _endpointCollectionService.GetEndpointCollections().OrderBy(ec => ec.Sorting))
-					{
-                        var parameterOptions = _endpointCollectionService.GetEndpoints(collection.Id).Select(endpoint => 
-                        new ParameterOption(endpoint.Name,new GroupedDropDownParameterEditor.DropDownItem(endpoint.Name, collection.Name, endpoint.Id.ToString())) 
-                        { 
+                    foreach (var collection in _endpointCollectionService.GetEndpointCollections().OrderBy(ec => ec.Sorting))
+                    {
+                        var parameterOptions = _endpointCollectionService.GetEndpoints(collection.Id).Select(endpoint =>
+                        new ParameterOption(endpoint.Name, new GroupedDropDownParameterEditor.DropDownItem(endpoint.Name, collection.Name, endpoint.Id.ToString()))
+                        {
                             Group = collection.Name
                         });
-						result.AddRange(parameterOptions);
-					}
+                        result.AddRange(parameterOptions);
+                    }
                     result.AddRange(_endpointService.GetEndpoints().Where(e => e.Collection == null).Select(endpoint =>
-						new ParameterOption(endpoint.Name, new GroupedDropDownParameterEditor.DropDownItem(endpoint.Name, "Dynamicweb 9 Endpoints", endpoint.Id.ToString()))
-						{
-							Group = "Dynamicweb 9 Endpoints"
-						}));
+                        new ParameterOption(endpoint.Name, new GroupedDropDownParameterEditor.DropDownItem(endpoint.Name, "Dynamicweb 9 Endpoints", endpoint.Id.ToString()))
+                        {
+                            Group = "Dynamicweb 9 Endpoints"
+                        }));
 
                     return result;
                 }
@@ -302,34 +304,36 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
     /// <inheritdoc />
     public override Schema GetOriginalSourceSchema()
     {
-        var name = GetEntityName();
         var entityTypeTables = new Schema();
         var entitySetsTables = new Schema();
 
+        if (_endpoint == null)
+        {
+            return new Schema();
+        }
+
+        var name = GetEntityName();
         var header = new Dictionary<string, string>
         {
             { "accept", "text/html,application/xhtml+xml,application/xml" },
             { "Content-Type", "text/html" }
         };
-        if (_endpoint != null)
+        var endpointAuthentication = _endpoint.Authentication;
+        if (endpointAuthentication != null)
         {
-            var endpointAuthentication = _endpoint.Authentication;
-            if (endpointAuthentication != null)
-            {
-                SetCredentials();
-            }
-            Task metadataResponse;
-            if (endpointAuthentication.IsTokenBased())
-            {
-                string token = OAuthHelper.GetToken(_endpoint, endpointAuthentication);
-                metadataResponse = new HttpRestClient(_credentials, 20).GetAsync(GetMetadataURL(), HandleStream, token);
-            }
-            else
-            {
-                metadataResponse = new HttpRestClient(_credentials, 20).GetAsync(GetMetadataURL(), HandleStream, endpointAuthentication, header);
-            }
-            metadataResponse.Wait();
+            SetCredentials();
         }
+        Task metadataResponse;
+        if (endpointAuthentication.IsTokenBased())
+        {
+            string token = OAuthHelper.GetToken(_endpoint, endpointAuthentication);
+            metadataResponse = new HttpRestClient(_credentials, 20).GetAsync(GetMetadataURL(), HandleStream, token);
+        }
+        else
+        {
+            metadataResponse = new HttpRestClient(_credentials, 20).GetAsync(GetMetadataURL(), HandleStream, endpointAuthentication, header);
+        }
+        metadataResponse.Wait();
 
         var emptySchema = new Schema();
         if (entitySetsTables == emptySchema)
@@ -387,7 +391,12 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
             {
                 if (table.Columns.Where(obj => obj.Name == item.Name).Count() == 0)
                 {
-                    table.AddColumn(new Column(item.Name, item.Type, table, item.IsPrimaryKey, item.IsNew, item.ReadOnly));
+                    if (item is TableColumn tableColumn)
+                        table.AddColumn(new TableColumn(tableColumn.Name, tableColumn.TableNameReference, table, tableColumn.Type));
+                    else
+                    {
+                        table.AddColumn(new Column(item.Name, item.Type, table, item.IsPrimaryKey, item.IsNew, item.ReadOnly));
+                    }
                 }
             }
         }
@@ -399,6 +408,7 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
         string entityName = xmlReader.GetAttribute("Name");
         List<string> primaryKeys = new List<string>();
         Column column = null;
+        TableColumn tableColumn = null;
         while (xmlReader.Read() && !(xmlReader.NodeType == XmlNodeType.EndElement && xmlReader.Name.Equals("EntityType", StringComparison.OrdinalIgnoreCase)))
         {
             if (xmlReader.NodeType == XmlNodeType.Element && xmlReader.Name.Equals("PropertyRef", StringComparison.OrdinalIgnoreCase))
@@ -428,6 +438,16 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
                 string permission = xmlReader.Value;
                 if (!string.IsNullOrEmpty(permission) && permission.ToLower().EndsWith("permissiontype/read"))
                     column.ReadOnly = true;
+            }
+            else if (xmlReader.NodeType == XmlNodeType.Element && xmlReader.Name.Equals("NavigationProperty", StringComparison.OrdinalIgnoreCase))
+            {
+                //var containsTarget = xmlReader.GetAttribute("ContainsTarget");
+                var columnTableName = xmlReader.GetAttribute("Name");
+                var columnTableTypeString = xmlReader.GetAttribute("Type");
+                var columnTableType = GetColumnTableType(columnTableTypeString);
+                var tableName = GetTableName(columnTableTypeString);
+                tableColumn = new TableColumn(columnTableName, tableName, table, columnTableType);
+                table.AddTableColumn(tableColumn);
             }
             else if (xmlReader.Name.Equals("EntityType", StringComparison.OrdinalIgnoreCase) && xmlReader.GetAttribute("Name") != entityName)
             {
@@ -478,6 +498,20 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
                 return typeof(bool);
         }
         return typeof(object);
+    }
+
+    private static Type GetColumnTableType(string columnTableTypeString)
+    {
+        if (columnTableTypeString.StartsWith("Collection", StringComparison.OrdinalIgnoreCase))
+            return typeof(Collection<object>);
+
+        return typeof(object);
+    }
+
+    private static string GetTableName(string columnTableTypeString)
+    {
+        var result = columnTableTypeString.Replace("Collection(NAV.", "", StringComparison.OrdinalIgnoreCase);
+        return result.Replace(")", "", StringComparison.OrdinalIgnoreCase);
     }
 
     /// <inheritdoc />
