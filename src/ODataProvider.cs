@@ -1,15 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-using System.IO;
-using System.Linq;
-using System.Net;
-using System.Net.Http;
-using System.Text.Json;
-using System.Text.RegularExpressions;
-using System.Threading.Tasks;
-using System.Xml;
-using System.Xml.Linq;
-using Dynamicweb.Core;
+﻿using Dynamicweb.Core;
 using Dynamicweb.DataIntegration.EndpointManagement;
 using Dynamicweb.DataIntegration.Integration;
 using Dynamicweb.DataIntegration.Integration.ERPIntegration;
@@ -20,6 +9,17 @@ using Dynamicweb.Extensibility.AddIns;
 using Dynamicweb.Extensibility.Editors;
 using Dynamicweb.Logging;
 using Dynamicweb.Security.Licensing;
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Text.Json;
+using System.Text.RegularExpressions;
+using System.Threading.Tasks;
+using System.Xml;
+using System.Xml.Linq;
 
 namespace Dynamicweb.DataIntegration.Providers.ODataProvider;
 
@@ -31,7 +31,7 @@ namespace Dynamicweb.DataIntegration.Providers.ODataProvider;
 [ResponseMapping(true)]
 public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOptions, IODataBaseProvider, IParameterVisibility
 {
-    internal readonly EndpointService _endpointService = new(); 
+    internal readonly EndpointService _endpointService = new();
     internal readonly EndpointCollectionService _endpointCollectionService = new EndpointCollectionService();
     internal Schema _schema;
     internal Endpoint _endpoint;
@@ -219,20 +219,20 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
                 {
                     var result = new List<ParameterOption>();
 
-                    foreach(var collection in _endpointCollectionService.GetEndpointCollections().OrderBy(ec => ec.Sorting))
-					{
-                        var parameterOptions = _endpointCollectionService.GetEndpoints(collection.Id).Select(endpoint => 
-                        new ParameterOption(endpoint.Name,new GroupedDropDownParameterEditor.DropDownItem(endpoint.Name, collection.Name, endpoint.Id.ToString())) 
-                        { 
+                    foreach (var collection in _endpointCollectionService.GetEndpointCollections().OrderBy(ec => ec.Sorting))
+                    {
+                        var parameterOptions = _endpointCollectionService.GetEndpoints(collection.Id).Select(endpoint =>
+                        new ParameterOption(endpoint.Name, new GroupedDropDownParameterEditor.DropDownItem(endpoint.Name, collection.Name, endpoint.Id.ToString()))
+                        {
                             Group = collection.Name
                         });
-						result.AddRange(parameterOptions);
-					}
+                        result.AddRange(parameterOptions);
+                    }
                     result.AddRange(_endpointService.GetEndpoints().Where(e => e.Collection == null).Select(endpoint =>
-						new ParameterOption(endpoint.Name, new GroupedDropDownParameterEditor.DropDownItem(endpoint.Name, "Dynamicweb 9 Endpoints", endpoint.Id.ToString()))
-						{
-							Group = "Dynamicweb 9 Endpoints"
-						}));
+                        new ParameterOption(endpoint.Name, new GroupedDropDownParameterEditor.DropDownItem(endpoint.Name, "Dynamicweb 9 Endpoints", endpoint.Id.ToString()))
+                        {
+                            Group = "Dynamicweb 9 Endpoints"
+                        }));
 
                     return result;
                 }
@@ -302,34 +302,36 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
     /// <inheritdoc />
     public override Schema GetOriginalSourceSchema()
     {
-        var name = GetEntityName();
         var entityTypeTables = new Schema();
         var entitySetsTables = new Schema();
 
+        if (_endpoint == null)
+        {
+            return new Schema();
+        }
+
+        var name = GetEntityName();
         var header = new Dictionary<string, string>
         {
             { "accept", "text/html,application/xhtml+xml,application/xml" },
             { "Content-Type", "text/html" }
         };
-        if (_endpoint != null)
+        var endpointAuthentication = _endpoint.Authentication;
+        if (endpointAuthentication != null)
         {
-            var endpointAuthentication = _endpoint.Authentication;
-            if (endpointAuthentication != null)
-            {
-                SetCredentials();
-            }
-            Task metadataResponse;
-            if (endpointAuthentication.IsTokenBased())
-            {
-                string token = OAuthHelper.GetToken(_endpoint, endpointAuthentication);
-                metadataResponse = new HttpRestClient(_credentials, 20).GetAsync(GetMetadataURL(), HandleStream, token);
-            }
-            else
-            {
-                metadataResponse = new HttpRestClient(_credentials, 20).GetAsync(GetMetadataURL(), HandleStream, endpointAuthentication, header);
-            }
-            metadataResponse.Wait();
+            SetCredentials();
         }
+        Task metadataResponse;
+        if (endpointAuthentication.IsTokenBased())
+        {
+            string token = OAuthHelper.GetToken(_endpoint, endpointAuthentication);
+            metadataResponse = new HttpRestClient(_credentials, 20).GetAsync(GetMetadataURL(), HandleStream, token);
+        }
+        else
+        {
+            metadataResponse = new HttpRestClient(_credentials, 20).GetAsync(GetMetadataURL(), HandleStream, endpointAuthentication, header);
+        }
+        metadataResponse.Wait();
 
         var emptySchema = new Schema();
         if (entitySetsTables == emptySchema)
