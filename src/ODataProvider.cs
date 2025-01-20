@@ -384,7 +384,8 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
     private void GetColumnsFromEntityTypeTableToEntitySetTable(Table table, Schema entityTypeSchema, string entityTypeName)
     {
         var entityTypeNameClean = entityTypeName.Substring(entityTypeName.LastIndexOf(".") + 1);
-        Table result = entityTypeSchema.GetTables().Where(obj => obj.Name.Equals(entityTypeNameClean, StringComparison.OrdinalIgnoreCase)).FirstOrDefault();
+        var entityTypeSchemaTables = entityTypeSchema.GetTables();
+        Table result = entityTypeSchemaTables.Where(obj => obj.Name.Equals(entityTypeNameClean, StringComparison.OrdinalIgnoreCase)).FirstOrDefault();
         if (result != null)
         {
             foreach (var item in result.Columns)
@@ -392,7 +393,10 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
                 if (table.Columns.Where(obj => obj.Name == item.Name).Count() == 0)
                 {
                     if (item is TableColumn tableColumn)
-                        table.AddColumn(new TableColumn(tableColumn.Name, tableColumn.TableNameReference, table, tableColumn.Type));
+                    {
+                        var columns = entityTypeSchemaTables.FirstOrDefault(obj => obj.Name.Equals(tableColumn.TableNameReference,StringComparison.OrdinalIgnoreCase))?.Columns ?? [];
+                        table.AddColumn(new TableColumn(tableColumn.Name, tableColumn.TableNameReference, table, tableColumn.Type, columns));
+                    }
                     else
                     {
                         table.AddColumn(new Column(item.Name, item.Type, table, item.IsPrimaryKey, item.IsNew, item.ReadOnly));
@@ -446,7 +450,10 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
                 var columnTableTypeString = xmlReader.GetAttribute("Type");
                 var columnTableType = GetColumnTableType(columnTableTypeString);
                 var tableName = GetTableName(columnTableTypeString);
-                tableColumn = new TableColumn(columnTableName, tableName, table, columnTableType);
+                tableColumn = new TableColumn(columnTableName, tableName, table, columnTableType, [])
+                {
+                    Group = columnTableName
+                };
                 table.AddTableColumn(tableColumn);
             }
             else if (xmlReader.Name.Equals("EntityType", StringComparison.OrdinalIgnoreCase) && xmlReader.GetAttribute("Name") != entityName)
