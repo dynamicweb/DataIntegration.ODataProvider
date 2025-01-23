@@ -394,8 +394,8 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
                 {
                     if (item is TableColumn tableColumn)
                     {
-                        var columns = entityTypeSchemaTables.FirstOrDefault(obj => obj.Name.Equals(tableColumn.TableNameReference,StringComparison.OrdinalIgnoreCase))?.Columns ?? [];
-                        table.AddColumn(new TableColumn(tableColumn.Name, tableColumn.TableNameReference, table, tableColumn.Type, columns));
+                        var columns = entityTypeSchemaTables.FirstOrDefault(obj => obj.Name.Equals(tableColumn.Group,StringComparison.OrdinalIgnoreCase))?.Columns ?? [];
+                        table.AddColumn(new TableColumn(tableColumn.Group, table, tableColumn.Type, columns));
                     }
                     else
                     {
@@ -446,14 +446,10 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
             else if (xmlReader.NodeType == XmlNodeType.Element && xmlReader.Name.Equals("NavigationProperty", StringComparison.OrdinalIgnoreCase))
             {
                 //var containsTarget = xmlReader.GetAttribute("ContainsTarget");
-                var columnTableName = xmlReader.GetAttribute("Name");
                 var columnTableTypeString = xmlReader.GetAttribute("Type");
                 var columnTableType = GetColumnTableType(columnTableTypeString);
                 var tableName = GetTableName(columnTableTypeString);
-                tableColumn = new TableColumn(columnTableName, tableName, table, columnTableType, [])
-                {
-                    Group = columnTableName
-                };
+                tableColumn = new TableColumn(tableName, table, columnTableType, []);
                 table.AddTableColumn(tableColumn);
             }
             else if (xmlReader.Name.Equals("EntityType", StringComparison.OrdinalIgnoreCase) && xmlReader.GetAttribute("Name") != entityName)
