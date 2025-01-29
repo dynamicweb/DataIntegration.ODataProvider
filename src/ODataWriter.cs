@@ -31,6 +31,7 @@ internal class ODataWriter : IDisposable, IDestinationWriter
     public Mapping Mapping { get; }
     internal JsonObject PostBackObject { get; set; }
     private readonly ColumnMappingCollection _columnMappings;
+    private readonly Dictionary<string, string> _endpointExpand;
 
     internal ODataWriter(ILogger logger, Mapping mapping, Endpoint endpoint, ICredentials credentials, bool continueOnError)
     {
@@ -45,12 +46,13 @@ internal class ODataWriter : IDisposable, IDestinationWriter
         _responseMappings = Mapping.GetResponseColumnMappings();
         _continueOnError = continueOnError;
         _columnMappings = Mapping.GetColumnMappings();
+        _endpointExpand = GetExpandForMapping();
     }
 
     public void Write(Dictionary<string, object> Row)
     {
         string endpointURL = Endpoint.Url;
-        string url = ODataSourceReader.GetEndpointURL(endpointURL, Mapping.DestinationTable.Name, "");
+        string url = ODataSourceReader.GetEndpointURL(endpointURL, Mapping.DestinationTable.Name, "", _endpointExpand);
 
         var keyColumnValuesForFilter = GetKeyColumnValuesForFilter(Row);
 
@@ -62,6 +64,16 @@ internal class ODataWriter : IDisposable, IDestinationWriter
             if (Endpoint.Parameters != null)
             {
                 foreach (var item in Endpoint.Parameters)
+                {
+                    if (!parameters.ContainsKey(item.Key))
+                    {
+                        parameters.Add(item.Key, item.Value);
+                    }
+                }
+            }
+            if (_endpointExpand != null)
+            {
+                foreach (var item in _endpointExpand)
                 {
                     if (!parameters.ContainsKey(item.Key))
                     {
@@ -83,7 +95,7 @@ internal class ODataWriter : IDisposable, IDestinationWriter
 
             var response = responseFromEndpoint?.Result?.Content?.Value;
 
-            url = ODataSourceReader.GetEndpointURL(endpointURL, Mapping.DestinationTable.Name, "");
+            url = ODataSourceReader.GetEndpointURL(endpointURL, Mapping.DestinationTable.Name, "", _endpointExpand);
             if (response != null && response.Count > 0)
             {
                 if (response.Count > 1)
@@ -133,7 +145,7 @@ internal class ODataWriter : IDisposable, IDestinationWriter
                 if (primaryKeyColumnValuesForPatch.Any())
                 {
                     string patchURL = "(" + string.Join(",", primaryKeyColumnValuesForPatch) + ")";
-                    url = ODataSourceReader.GetEndpointURL(endpointURL, Mapping.DestinationTable.Name, patchURL);
+                    url = ODataSourceReader.GetEndpointURL(endpointURL, Mapping.DestinationTable.Name, patchURL, _endpointExpand);
                 }
                 awaitResponseFromEndpoint = PostToEndpoint<JsonObject>(url, patchJson, headers, true);
             }
@@ -294,7 +306,9 @@ internal class ODataWriter : IDisposable, IDestinationWriter
     {
         var jsonObject = new JsonObject();
 
-        foreach (ColumnMapping columnMapping in _columnMappings)
+        var rootMappings = _columnMappings.Where(m => string.IsNullOrEmpty(m.DestinationColumn.Group));
+        var nestedMappings = _columnMappings.Where(m => !string.IsNullOrEmpty(m.DestinationColumn.Group));
+        foreach (ColumnMapping columnMapping in rootMappings)
         {
             if (!columnMapping.Active || (columnMapping.ScriptValueForInsert && isPatchRequest))
                 continue;
@@ -322,6 +336,35 @@ internal class ODataWriter : IDisposable, IDestinationWriter
                         break;
                     default:
                         jsonObject.Add(columnMapping.DestinationColumn.Name, Converter.ToString(columnValue));
+                        break;
+                }
+            }
+        }
+        if (nestedMappings.Any())
+        {
+            var nestedJsonObject = new JsonObject();
+            foreach (ColumnMapping cm in nestedMappings)
+            {
+                var columnValue = cm.ConvertInputValueToOutputValue(row.TryGetValue(cm.DestinationColumn.Group ?? "", out var value) ? value : null);
+                switch (cm.DestinationColumn.Type.Name.ToLower())
+                {
+                    case "decimal":
+                        nestedJsonObject.Add(cm.DestinationColumn.Name, Converter.ToDecimal(columnValue));
+                        break;
+                    case "int":
+                        nestedJsonObject.Add(cm.DestinationColumn.Name, Converter.ToInt64(columnValue));
+                        break;
+                    case "double":
+                        nestedJsonObject.Add(cm.DestinationColumn.Name, Converter.ToDecimal(columnValue));
+                        break;
+                    case "datetime":
+                        nestedJsonObject.Add(cm.DestinationColumn.Name, GetTheDateTimeInZeroTimeZone(columnValue, false));
+                        break;
+                    case "dateonly":
+                        nestedJsonObject.Add(cm.DestinationColumn.Name, GetTheDateTimeInZeroTimeZone(columnValue, true));
+                        break;
+                    default:
+                        nestedJsonObject.Add(cm.DestinationColumn.Name, Converter.ToString(columnValue));
                         break;
                 }
             }
@@ -355,6 +398,23 @@ internal class ODataWriter : IDisposable, IDestinationWriter
             }
         }
         return null;
+    }
+
+    private Dictionary<string, string> GetExpandForMapping()
+    {
+        if (Mapping.DestinationTable == null)
+            return [];
+
+        var columnMappings = Mapping.GetColumnMappings();
+
+        if (!columnMappings.Any(column => !string.IsNullOrEmpty(column.DestinationColumn.Group)))
+            return [];
+
+        var mappingGroups = columnMappings.DistinctBy(column => column.DestinationColumn.Group).Select(column => column.DestinationColumn.Name).ToList();
+        if (mappingGroups.Count != 0)
+            return new Dictionary<string, string>() { { "$expand", string.Join(",", mappingGroups) } };
+
+        return [];
     }
 
     public void Dispose() { }

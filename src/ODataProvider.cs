@@ -515,6 +515,7 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
     private static string GetTableName(string columnTableTypeString)
     {
         var result = columnTableTypeString.Replace("Collection(NAV.", "", StringComparison.OrdinalIgnoreCase);
+        result = result.Replace("Collection(Microsoft.NAV.", "", StringComparison.OrdinalIgnoreCase);
         return result.Replace(")", "", StringComparison.OrdinalIgnoreCase);
     }
 
