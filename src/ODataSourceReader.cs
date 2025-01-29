@@ -166,19 +166,28 @@ internal class ODataSourceReader : ISourceReader
         var selectAsParameters = GetSelectAsParameters(readFromLastRequestResponse);
         var modeAsParemters = GetModeAsParameters();
         var filterAsParameters = GetFilterAsParameters(_mapping);
+        var expandAsParameters = GetExpandAsParameters(_mapping);
+
         if (!string.IsNullOrEmpty(modeAsParemters))
         {
             filterAsParameters.Add(modeAsParemters);
         }
 
-        if (selectAsParameters.Any())
+        if (selectAsParameters.Count != 0)
         {
             parameters.Add("$select", string.Join(",", selectAsParameters));
         }
 
-        if (filterAsParameters.Any())
+        if (filterAsParameters.Count != 0)
         {
             parameters.Add("$filter", string.Join(" and ", filterAsParameters));
+        }
+
+        if (expandAsParameters.Count != 0)
+        {
+            //It is possible to use $select for the middle table by just separating select and expand with semicolon:
+            //Customers?$select=CustomerID&$expand=Orders($select=OrderID;$expand=Order_Details($select=UnitPrice))
+            parameters.Add("$expand", string.Join(",", expandAsParameters));
         }
 
         if (_endpoint.Parameters != null)
@@ -336,10 +345,10 @@ internal class ODataSourceReader : ISourceReader
     private List<string> GetSelectAsParameters(bool readFromLastRequestResponse)
     {
         List<string> result = new();
-        var activeColumnMappings = _mapping.GetColumnMappings().Where(obj => obj.Active).ToList();
+        var activeColumnMappings = _mapping.GetColumnMappings().Where(obj => obj.Active && obj.SourceColumn != null).ToList();
         if (activeColumnMappings.Any())
         {
-            var selectColumnNames = activeColumnMappings.Where(obj => obj.SourceColumn != null)?.Select(obj => obj.SourceColumn.Name).ToList();
+            var selectColumnNames = activeColumnMappings.Where(obj => string.IsNullOrEmpty(obj.SourceColumn.Group))?.Select(obj => obj.SourceColumn.Name).ToList();
 
             if (readFromLastRequestResponse)
             {
@@ -505,6 +514,17 @@ internal class ODataSourceReader : ISourceReader
     private void LogWarningForConditional(MappingConditional item)
     {
         _logger?.Warn($"Can only add {item.ConditionalOperator} on Edm.String and the {item.SourceColumn.Name} is a type of {item.SourceColumn.Type.Name} for the table mapping {_mapping.SourceTable.Name} to {_mapping.DestinationTable.Name}, so this have been removed from the $filter.");
+    }
+
+    private List<string> GetExpandAsParameters(Mapping mapping)
+    {
+        List<string> result = new();
+        var sourceColumnsWithGroups = mapping.SourceTable.Columns.Where(obj => !string.IsNullOrEmpty(obj.Group));
+        if (sourceColumnsWithGroups.Any())
+        {
+            result.AddRange(sourceColumnsWithGroups.DistinctBy(obj => obj.Group).Select(obj => obj.Name));
+        }
+        return result;
     }
 
     /// <summary>
