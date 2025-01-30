@@ -360,9 +360,13 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
                         else if (xmlReader.NodeType == XmlNodeType.Element &&
                             xmlReader.Name.Equals("EntitySet", StringComparison.OrdinalIgnoreCase))
                         {
-                            GetColumnsFromEntityTypeTableToEntitySetTable(entitySetsTables.AddTable(xmlReader.GetAttribute("Name")), entityTypeTables, xmlReader.GetAttribute("EntityType"));
+                            var entityTypeName = xmlReader.GetAttribute("EntityType");
+                            var SqlSchema = entityTypeName.Substring(entityTypeName.LastIndexOf(".") + 1);
+                            var setTable = entitySetsTables.AddTable(xmlReader.GetAttribute("Name"), SqlSchema);
                         }
                     }
+
+                    GetColumnsFromEntityTypeTableToEntitySetTable(entityTypeTables, entitySetsTables);
                     if (!EndpointIsLoadAllEntities(_endpoint.Url))
                     {
                         var singleEntitySetSelected = entitySetsTables.GetTables().FirstOrDefault(obj => obj.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
@@ -381,29 +385,39 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
         }
     }
 
-    private void GetColumnsFromEntityTypeTableToEntitySetTable(Table table, Schema entityTypeSchema, string entityTypeName)
+    private void GetColumnsFromEntityTypeTableToEntitySetTable(Schema entityTypeSchema, Schema entitySetsTables)
     {
-        var entityTypeNameClean = entityTypeName.Substring(entityTypeName.LastIndexOf(".") + 1);
         var entityTypeSchemaTables = entityTypeSchema.GetTables();
-        Table result = entityTypeSchemaTables.Where(obj => obj.Name.Equals(entityTypeNameClean, StringComparison.OrdinalIgnoreCase)).FirstOrDefault();
-        if (result != null)
+        var entitySetSchemaTables = entitySetsTables.GetTables();
+        foreach (var table in entitySetSchemaTables)
         {
-            foreach (var item in result.Columns)
+            Table result = entityTypeSchemaTables.Where(obj => obj.Name.Equals(table.SqlSchema, StringComparison.OrdinalIgnoreCase)).FirstOrDefault();
+            if (result != null)
             {
-                if (table.Columns.Where(obj => obj.Name == item.Name).Count() == 0)
+                foreach (var item in result.Columns)
                 {
-                    if (item is TableColumn tableColumn)
+                    if (table.Columns.Where(obj => obj.Name == item.Name).Count() == 0)
                     {
-                        var columns = entityTypeSchemaTables.FirstOrDefault(obj => obj.Name.Equals(tableColumn.Group,StringComparison.OrdinalIgnoreCase))?.Columns ?? [];
-                        table.AddColumn(new TableColumn(tableColumn.Name, tableColumn.Group, table, tableColumn.Type, columns));
-                    }
-                    else
-                    {
-                        table.AddColumn(new Column(item.Name, item.Type, table, item.IsPrimaryKey, item.IsNew, item.ReadOnly));
+                        if (item is TableColumn tableColumn)
+                        {
+                            var tableGroupName = tableColumn.Group;
+                            var columns = entityTypeSchemaTables.FirstOrDefault(obj => obj.Name.Equals(tableColumn.Group, StringComparison.OrdinalIgnoreCase))?.Columns ?? [];
+                            var entitySetTableName = entitySetSchemaTables.FirstOrDefault(obj => obj.SqlSchema.Equals(tableColumn.Group));
+                            if (entitySetTableName != null)
+                            {
+                                tableGroupName = entitySetTableName.Name;
+                            }
+                            table.AddColumn(new TableColumn(tableColumn.Name, tableGroupName, table, tableColumn.Type, columns));
+                        }
+                        else
+                        {
+                            table.AddColumn(new Column(item.Name, item.Type, table, item.IsPrimaryKey, item.IsNew, item.ReadOnly));
+                        }
                     }
                 }
             }
         }
+        entitySetSchemaTables.ForEach(obj => obj.SqlSchema = string.Empty);
     }
 
     private void AddPropertiesFromXMLReaderToTable(XmlReader xmlReader, Table table, Schema result)
@@ -514,8 +528,9 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
 
     private static string GetTableName(string columnTableTypeString)
     {
-        var result = columnTableTypeString.Replace("Collection(NAV.", "", StringComparison.OrdinalIgnoreCase);
-        result = result.Replace("Collection(Microsoft.NAV.", "", StringComparison.OrdinalIgnoreCase);
+        var result = columnTableTypeString.Replace("Collection(", "", StringComparison.OrdinalIgnoreCase);
+        result = result.Replace("Microsoft.NAV.", "", StringComparison.OrdinalIgnoreCase);
+        result = result.Replace("NAV.", "", StringComparison.OrdinalIgnoreCase);
         return result.Replace(")", "", StringComparison.OrdinalIgnoreCase);
     }
 
