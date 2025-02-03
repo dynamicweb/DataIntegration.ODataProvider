@@ -345,35 +345,50 @@ internal class ODataWriter : IDisposable, IDestinationWriter
             var nestedGroups = nestedMappings.DistinctBy(group => group.DestinationColumn.Group).Select(group => group.DestinationColumn.Group);
             foreach (var group in nestedGroups)
             {
-                var nestedJsonObject = new JsonObject();
-                foreach (ColumnMapping cm in nestedMappings.Where(mapping => mapping.DestinationColumn.Group.Equals(group)))
-                {
-                    row.TryGetValue(cm.SourceColumn?.Name ?? "", out var value);
+                var nestedMapping = nestedMappings.FirstOrDefault(mapping => mapping.DestinationColumn.Group.Equals(group));
+                if (nestedMapping == null)
+                    continue;
 
-                    var columnValue = cm.ConvertInputValueToOutputValue(value);
-                    switch (cm.DestinationColumn.Type.Name.ToLower())
-                    {
-                        case "decimal":
-                            nestedJsonObject.Add(cm.DestinationColumn.Name, Converter.ToDecimal(columnValue));
-                            break;
-                        case "int":
-                            nestedJsonObject.Add(cm.DestinationColumn.Name, Converter.ToInt64(columnValue));
-                            break;
-                        case "double":
-                            nestedJsonObject.Add(cm.DestinationColumn.Name, Converter.ToDecimal(columnValue));
-                            break;
-                        case "datetime":
-                            nestedJsonObject.Add(cm.DestinationColumn.Name, GetTheDateTimeInZeroTimeZone(columnValue, false));
-                            break;
-                        case "dateonly":
-                            nestedJsonObject.Add(cm.DestinationColumn.Name, GetTheDateTimeInZeroTimeZone(columnValue, true));
-                            break;
-                        default:
-                            nestedJsonObject.Add(cm.DestinationColumn.Name, Converter.ToString(columnValue));
-                            break;
-                    }
+                if (!row.TryGetValue(nestedMapping.SourceColumn.Group, out var nestedValue))
+                {
+                    continue;
                 }
-                jsonObject.Add(group, nestedJsonObject);
+                if (nestedValue is List<Dictionary<string, object>> nestedValueCollection)
+                {
+                    var nestedJsonObjectList = new JsonArray();
+                    foreach (var nestedRow in nestedValueCollection)
+                    {
+                        var nestedJsonObject = new JsonObject();
+                        foreach (ColumnMapping nestedColumnMapping in nestedMappings.Where(mapping => mapping.DestinationColumn.Group.Equals(group)))
+                        {
+                            var nestedColumnValue = nestedColumnMapping.ConvertInputValueToOutputValue(nestedColumnMapping.HasScriptWithValue ? null : nestedRow.TryGetValue(nestedColumnMapping.SourceColumn?.Name ?? "", out var value) ? value : null);
+
+                            switch (nestedColumnMapping.DestinationColumn.Type.Name.ToLower())
+                            {
+                                case "decimal":
+                                    nestedJsonObject.Add(nestedColumnMapping.DestinationColumn.Name, Converter.ToDecimal(nestedColumnValue));
+                                    break;
+                                case "int":
+                                    nestedJsonObject.Add(nestedColumnMapping.DestinationColumn.Name, Converter.ToInt64(nestedColumnValue));
+                                    break;
+                                case "double":
+                                    nestedJsonObject.Add(nestedColumnMapping.DestinationColumn.Name, Converter.ToDecimal(nestedColumnValue));
+                                    break;
+                                case "datetime":
+                                    nestedJsonObject.Add(nestedColumnMapping.DestinationColumn.Name, GetTheDateTimeInZeroTimeZone(nestedColumnValue, false));
+                                    break;
+                                case "dateonly":
+                                    nestedJsonObject.Add(nestedColumnMapping.DestinationColumn.Name, GetTheDateTimeInZeroTimeZone(nestedColumnValue, true));
+                                    break;
+                                default:
+                                    nestedJsonObject.Add(nestedColumnMapping.DestinationColumn.Name, Converter.ToString(nestedColumnValue));
+                                    break;
+                            }
+                        }
+                        nestedJsonObjectList.Add(nestedJsonObject);
+                    }
+                    jsonObject.Add(group, nestedJsonObjectList);
+                }
             }
         }
         return jsonObject.ToJsonString();
