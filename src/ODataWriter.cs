@@ -342,31 +342,38 @@ internal class ODataWriter : IDisposable, IDestinationWriter
         }
         if (nestedMappings.Any())
         {
-            var nestedJsonObject = new JsonObject();
-            foreach (ColumnMapping cm in nestedMappings)
+            var nestedGroups = nestedMappings.DistinctBy(group => group.DestinationColumn.Group).Select(group => group.DestinationColumn.Group);
+            foreach (var group in nestedGroups)
             {
-                var columnValue = cm.ConvertInputValueToOutputValue(row.TryGetValue(cm.DestinationColumn.Group ?? "", out var value) ? value : null);
-                switch (cm.DestinationColumn.Type.Name.ToLower())
+                var nestedJsonObject = new JsonObject();
+                foreach (ColumnMapping cm in nestedMappings.Where(mapping => mapping.DestinationColumn.Group.Equals(group)))
                 {
-                    case "decimal":
-                        nestedJsonObject.Add(cm.DestinationColumn.Name, Converter.ToDecimal(columnValue));
-                        break;
-                    case "int":
-                        nestedJsonObject.Add(cm.DestinationColumn.Name, Converter.ToInt64(columnValue));
-                        break;
-                    case "double":
-                        nestedJsonObject.Add(cm.DestinationColumn.Name, Converter.ToDecimal(columnValue));
-                        break;
-                    case "datetime":
-                        nestedJsonObject.Add(cm.DestinationColumn.Name, GetTheDateTimeInZeroTimeZone(columnValue, false));
-                        break;
-                    case "dateonly":
-                        nestedJsonObject.Add(cm.DestinationColumn.Name, GetTheDateTimeInZeroTimeZone(columnValue, true));
-                        break;
-                    default:
-                        nestedJsonObject.Add(cm.DestinationColumn.Name, Converter.ToString(columnValue));
-                        break;
+                    row.TryGetValue(cm.SourceColumn?.Name ?? "", out var value);
+
+                    var columnValue = cm.ConvertInputValueToOutputValue(value);
+                    switch (cm.DestinationColumn.Type.Name.ToLower())
+                    {
+                        case "decimal":
+                            nestedJsonObject.Add(cm.DestinationColumn.Name, Converter.ToDecimal(columnValue));
+                            break;
+                        case "int":
+                            nestedJsonObject.Add(cm.DestinationColumn.Name, Converter.ToInt64(columnValue));
+                            break;
+                        case "double":
+                            nestedJsonObject.Add(cm.DestinationColumn.Name, Converter.ToDecimal(columnValue));
+                            break;
+                        case "datetime":
+                            nestedJsonObject.Add(cm.DestinationColumn.Name, GetTheDateTimeInZeroTimeZone(columnValue, false));
+                            break;
+                        case "dateonly":
+                            nestedJsonObject.Add(cm.DestinationColumn.Name, GetTheDateTimeInZeroTimeZone(columnValue, true));
+                            break;
+                        default:
+                            nestedJsonObject.Add(cm.DestinationColumn.Name, Converter.ToString(columnValue));
+                            break;
+                    }
                 }
+                jsonObject.Add(group, nestedJsonObject);
             }
         }
         return jsonObject.ToJsonString();
@@ -407,10 +414,11 @@ internal class ODataWriter : IDisposable, IDestinationWriter
 
         var columnMappings = Mapping.GetColumnMappings();
 
-        if (!columnMappings.Any(column => !string.IsNullOrEmpty(column.DestinationColumn.Group)))
+        var columnMappingGroups = columnMappings.Where(column => !string.IsNullOrEmpty(column.DestinationColumn.Group));
+        if (!columnMappingGroups.Any())
             return [];
 
-        var mappingGroups = columnMappings.DistinctBy(column => column.DestinationColumn.Group).Select(column => column.DestinationColumn.Name).ToList();
+        var mappingGroups = columnMappingGroups.DistinctBy(column => column.DestinationColumn.Group).Select(column => column.DestinationColumn.Group).ToList();
         if (mappingGroups.Count != 0)
             return new Dictionary<string, string>() { { "$expand", string.Join(",", mappingGroups) } };
 
