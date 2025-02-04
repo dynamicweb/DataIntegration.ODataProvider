@@ -334,12 +334,28 @@ internal class ODataWriter : IDisposable, IDestinationWriter
                     case "dateonly":
                         jsonObject.Add(columnMapping.DestinationColumn.Name, GetTheDateTimeInZeroTimeZone(columnValue, true));
                         break;
+                    case "guid":
+                        if (string.IsNullOrEmpty(Converter.ToString(columnValue)))
+                        {
+                            jsonObject.Add(columnMapping.DestinationColumn.Name, Converter.ToString(Guid.Empty));
+                        }
+                        else
+                        {
+                            jsonObject.Add(columnMapping.DestinationColumn.Name, Converter.ToString(columnValue));
+                        }
+                        break;
                     default:
                         jsonObject.Add(columnMapping.DestinationColumn.Name, Converter.ToString(columnValue));
                         break;
                 }
             }
         }
+        //not able to patch/update nested objects
+        if (isPatchRequest)
+        {
+            return jsonObject.ToJsonString();
+        }
+
         if (nestedMappings.Any())
         {
             var nestedGroups = nestedMappings.DistinctBy(group => group.DestinationColumn.Group).Select(group => group.DestinationColumn.Group);
@@ -379,6 +395,16 @@ internal class ODataWriter : IDisposable, IDestinationWriter
                                     break;
                                 case "dateonly":
                                     nestedJsonObject.Add(nestedColumnMapping.DestinationColumn.Name, GetTheDateTimeInZeroTimeZone(nestedColumnValue, true));
+                                    break;
+                                case "guid":
+                                    if (string.IsNullOrEmpty(Converter.ToString(nestedColumnValue)))
+                                    {
+                                        nestedJsonObject.Add(nestedColumnMapping.DestinationColumn.Name, Converter.ToString(Guid.Empty));
+                                    }
+                                    else
+                                    {
+                                        nestedJsonObject.Add(nestedColumnMapping.DestinationColumn.Name, Converter.ToString(nestedColumnValue));
+                                    }
                                     break;
                                 default:
                                     nestedJsonObject.Add(nestedColumnMapping.DestinationColumn.Name, Converter.ToString(nestedColumnValue));
