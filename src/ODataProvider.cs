@@ -460,26 +460,19 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
     /// <returns></returns>
     private static Type GetColumnType(string columnTypeString)
     {
-        switch (columnTypeString)
+        return columnTypeString switch
         {
-            case "Edm.String":
-                return typeof(string);
-            case "Edm.Guid":
-                return typeof(Guid);
-            case "Edm.Int32":
-                return typeof(int);
-            case "Edm.Decimal":
-                return typeof(decimal);
-            case "Edm.Stream":
-                return typeof(Stream);
-            case "Edm.Date":
-                return typeof(DateOnly);
-            case "Edm.DateTimeOffset":
-                return typeof(DateTime);
-            case "Edm.Boolean":
-                return typeof(bool);
-        }
-        return typeof(object);
+            "Edm.String" => typeof(string),
+            "Edm.Guid" => typeof(Guid),
+            "Edm.Int32" => typeof(int),
+            "Edm.Decimal" => typeof(decimal),
+            "Edm.Stream" => typeof(Stream),
+            "Edm.Date" => typeof(DateOnly),
+            "Edm.DateTimeOffset" => typeof(DateTime),
+            "Edm.DateTime" => typeof(DateTime),
+            "Edm.Boolean" => typeof(bool),
+            _ => typeof(object),
+        };
     }
 
     /// <inheritdoc />
