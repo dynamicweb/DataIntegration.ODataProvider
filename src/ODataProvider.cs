@@ -130,7 +130,8 @@ public class ODataProvider : BaseProvider, ISource, IDestination, IParameterOpti
         if (responseJson.RootElement.ValueKind != JsonValueKind.Object)
             return GetMetadataURLFallBack();
 
-        return responseJson.RootElement.EnumerateObject().FirstOrDefault(obj => obj.Name.Equals("@odata.context", StringComparison.OrdinalIgnoreCase)).Value.GetString() ?? GetMetadataURLFallBack();
+        var odataContext = responseJson.RootElement.EnumerateObject().FirstOrDefault(obj => obj.Name.Equals("@odata.context", StringComparison.OrdinalIgnoreCase));
+        return odataContext.Value.ValueKind == JsonValueKind.Undefined ? GetMetadataURLFallBack() : odataContext.Value.GetString() ?? GetMetadataURLFallBack();
     }
 
     private string GetMetadataURLFallBack()
