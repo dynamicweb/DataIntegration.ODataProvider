@@ -1,6 +1,6 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 	<PropertyGroup>
-		<Version>10.8.5</Version>
+		<Version>10.8.6</Version>
 		<AssemblyVersion>1.0.0.0</AssemblyVersion>
 		<Title>OData Provider</Title>
 		<Description>The Odata Provider lets you fetch and map data from or to any OData endpoint.</Description>
