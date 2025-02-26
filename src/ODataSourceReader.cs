@@ -399,7 +399,7 @@ internal class ODataSourceReader : ISourceReader
         var groups = mapping.Conditionals.Groups.ToList();
         if (groups.Count > 0)
         {
-            string prependOperator = " AND";
+            string prependOperator = " And ";
             foreach (var group in groups)
             {
                 var filterAsParameters = GetFilterAsParameters(mapping, group.Conditionals);
