@@ -15,6 +15,7 @@ using System.Text;
 using System.Text.Json;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Web;
 
 namespace Dynamicweb.DataIntegration.Providers.ODataProvider;
 
@@ -238,26 +239,7 @@ internal class ODataSourceReader : ISourceReader
 
         if (parameters != null && parameters.Count > 0)
         {
-            StringBuilder stringBuilder = new StringBuilder(string.Empty);
-            foreach (KeyValuePair<string, string> parameter in parameters)
-            {
-                stringBuilder.Append("&" + parameter.Key + "=" + WebUtility.UrlEncode(parameter.Value));
-            }
-
-            if (stringBuilder.Length > 0)
-            {
-                if (!result.Contains("?"))
-                {
-                    return $"{result}?{stringBuilder.Remove(0, 1)}";
-                }
-
-                if (!result.EndsWith("?"))
-                {
-                    return $"{result}{stringBuilder}";
-                }
-
-                return $"{result}{stringBuilder.Remove(0, 1)}";
-            }
+            return BuildURLWithParameters(parameters, result);
         }
 
         return result;
@@ -381,7 +363,7 @@ internal class ODataSourceReader : ISourceReader
             foreach (var group in groups)
             {
                 var filters = GetFilterAsParameters(mapping, group.Conditionals);
-                result.AddRange(filters);                
+                result.AddRange(filters);
             }
         }
         else
@@ -406,8 +388,8 @@ internal class ODataSourceReader : ISourceReader
                 if (filterAsParameters.Any())
                 {
                     var groupFilter = string.Join($" {group.ConditionalOperator} ", filterAsParameters);
-                    result += $"({groupFilter}){prependOperator}";                    
-                }                
+                    result += $"({groupFilter}){prependOperator}";
+                }
             }
             if (!string.IsNullOrEmpty(result) && result.Length > prependOperator.Length)
             {
@@ -427,7 +409,7 @@ internal class ODataSourceReader : ISourceReader
 
     private List<string> GetFilterAsParameters(Mapping mapping, IEnumerable<MappingConditional> mappingConditionals)
     {
-        List<string> result = new();        
+        List<string> result = new();
         if (mappingConditionals.Any())
         {
             foreach (var item in mappingConditionals)
@@ -436,7 +418,7 @@ internal class ODataSourceReader : ISourceReader
                 if (!string.IsNullOrEmpty(itemFilter))
                 {
                     result.Add(itemFilter);
-                }                
+                }
             }
         }
         return result;
@@ -739,7 +721,7 @@ internal class ODataSourceReader : ISourceReader
         if (url.Contains('?'))
         {
             bool urlContainsTop = url.Contains("$top=", StringComparison.OrdinalIgnoreCase);
-            if (new Uri(url).Query.Any() && !urlContainsTop)
+            if (new Uri(url).Query.Length != 0 && !urlContainsTop)
             {
                 return $"{url}&$top=1";
             }
@@ -747,12 +729,47 @@ internal class ODataSourceReader : ISourceReader
             {
                 return $"{url}$top=1";
             }
-            return url;
+            else
+            {
+                var paramsCollection = HttpUtility.ParseQueryString(url);
+                if (paramsCollection is null)
+                    return url;
+
+                var paramsAsDictionary = paramsCollection.AllKeys.ToDictionary(k => k, k => paramsCollection[k]);
+                paramsAsDictionary["$top"] = "1";
+                return BuildURLWithParameters(paramsAsDictionary, url[..url.IndexOf('?')]);
+            }
         }
         else
         {
             return $"{url}?$top=1";
         }
+    }
+
+    private static string BuildURLWithParameters(IDictionary<string, string> parameters, string url)
+    {
+        StringBuilder stringBuilder = new(string.Empty);
+        foreach (KeyValuePair<string, string> parameter in parameters)
+        {
+            stringBuilder.Append("&" + parameter.Key + "=" + WebUtility.UrlEncode(parameter.Value));
+        }
+
+        if (stringBuilder.Length > 0)
+        {
+            if (!url.Contains('?'))
+            {
+                return $"{url}?{stringBuilder.Remove(0, 1)}";
+            }
+
+            if (!url.EndsWith('?'))
+            {
+                return $"{url}{stringBuilder}";
+            }
+
+            return $"{url}{stringBuilder.Remove(0, 1)}";
+        }
+
+        return url;
     }
 
     private bool CheckIfEndpointIsReadyForUse(string url)
