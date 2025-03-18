@@ -381,13 +381,13 @@ internal class ODataSourceReader : ISourceReader
         var groups = mapping.Conditionals.Groups.ToList();
         if (groups.Count > 0)
         {
-            string prependOperator = " And ";
+            string prependOperator = " and ";
             foreach (var group in groups)
             {
                 var filterAsParameters = GetFilterAsParameters(mapping, group.Conditionals);
                 if (filterAsParameters.Any())
                 {
-                    var groupFilter = string.Join($" {group.ConditionalOperator} ", filterAsParameters);
+                    var groupFilter = string.Join($" {group.ConditionalOperator.ToString().ToLower()} ", filterAsParameters);
                     result += $"({groupFilter}){prependOperator}";
                 }
             }
