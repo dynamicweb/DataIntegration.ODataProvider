@@ -2,6 +2,7 @@
 using Dynamicweb.DataIntegration.EndpointManagement;
 using Dynamicweb.DataIntegration.Integration;
 using Dynamicweb.DataIntegration.Integration.Interfaces;
+using Dynamicweb.DataIntegration.ProviderHelpers;
 using Dynamicweb.DataIntegration.Providers.ODataProvider.Model;
 using Dynamicweb.Ecommerce;
 using Dynamicweb.Ecommerce.Orders;
@@ -39,7 +40,15 @@ internal class ODataWriter : IDisposable, IDestinationWriter
         Credentials = credentials;
         Mapping = mapping;
         EndpointAuthenticationService = new EndpointAuthenticationService();
-        var originalDestinationTables = Mapping.Destination.GetOriginalDestinationSchema().GetTables();
+        TableCollection originalDestinationTables;
+        if (Feature.IsActive<SchemaManagementFeature>())
+        {
+            originalDestinationTables = JobSchemaService.GetSchema(Mapping.Destination).GetTables();
+        }
+        else
+        {
+            originalDestinationTables = Mapping.Destination.GetOriginalDestinationSchema().GetTables();
+        }
         var originalDestinationMappingTable = originalDestinationTables.FirstOrDefault(obj => obj.Name == Mapping.DestinationTable.Name);
         _destinationPrimaryKeyColumns = originalDestinationMappingTable?.Columns.Where(obj => obj.IsPrimaryKey)?.ToDictionary(obj => obj.Name, obj => obj.Type) ?? new Dictionary<string, Type>();
         _responseMappings = Mapping.GetResponseColumnMappings();
